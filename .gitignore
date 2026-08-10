@@ -1,3 +1,13 @@
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Local Agent workflow state
+.zeta/
+.codex/
+.agents/
+
 # Logs
 logs
 *.log

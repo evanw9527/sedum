@@ -3,6 +3,7 @@ import {
   BookOpenIcon,
   BrainIcon,
   CaretRightIcon,
+  CaretLeftIcon,
   CheckCircleIcon,
   ChatsCircleIcon,
   ClockIcon,
@@ -14,6 +15,7 @@ import {
   GraphIcon,
   ChartBarIcon,
   HandIcon,
+  KeyboardIcon,
   LightningIcon,
   ListChecksIcon,
   MagnifyingGlassIcon,
@@ -26,6 +28,8 @@ import {
   SignOutIcon,
   SpinnerGapIcon,
   StopCircleIcon,
+  SunIcon,
+  MoonIcon,
   SlidersHorizontalIcon,
   TrashIcon,
   UserGearIcon,
@@ -67,6 +71,11 @@ const icons = {
   more: DotsThreeIcon,
   loading: SpinnerGapIcon,
   usage: ChartBarIcon,
+  activity: KeyboardIcon,
+  previous: CaretLeftIcon,
+  next: CaretRightIcon,
+  sun: SunIcon,
+  moon: MoonIcon,
 }
 
 function Icon({ name, size = 18, weight = 'regular' }) {

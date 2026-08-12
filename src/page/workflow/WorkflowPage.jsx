@@ -1,331 +1,299 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { snowGrassApi } from '../../api/snowGrassApi.js'
+import NodeLibrary from '../../component/workflow/components/NodeLibrary.jsx'
+import InspectorPanel from '../../component/workflow/components/InspectorPanel.jsx'
+import FlowRunDrawer from '../../component/workflow/components/FlowRunDrawer.jsx'
+import EdgeLayer from '../../component/workflow/components/EdgeLayer.jsx'
 import Icon from '../../shared/ui/Icon.jsx'
 import '../../styles/workflow.css'
-import InspectorPanel from '../../component/workflow/components/InspectorPanel.jsx'
-import NodeLibrary from '../../component/workflow/components/NodeLibrary.jsx'
-import WorkflowActions from '../../component/workflow/components/WorkflowActions.jsx'
-import { INITIAL_EDGES, INITIAL_NODES, KIND_LABELS, NODE_LIBRARY } from '../../component/workflow/workflow.data.js'
-import { edgePath } from '../../component/workflow/workflow.utils.js'
+
+const serialize = (nodes, edges) => ({
+  nodes: nodes.map(({ component: _component, ...node }) => node), edges,
+})
 
 function WorkflowPage() {
-  const [nodes, setNodes] = useState(INITIAL_NODES)
-  const [edges, setEdges] = useState(INITIAL_EDGES)
-  const [selected, setSelected] = useState({ type: 'node', id: 'condition' })
-  const [zoom, setZoom] = useState(() => window.innerWidth <= 760 ? .66 : window.innerWidth <= 1100 ? .85 : 1)
-  const [saved, setSaved] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [running, setRunning] = useState(false)
+  const { workflowId } = useParams()
+  const canvasRef = useRef(null)
+  const zoomRef = useRef(1)
+  const reconnectingRef = useRef(null)
+  const [workflow, setWorkflow] = useState(null)
+  const [library, setLibrary] = useState([])
+  const [flowVersions, setFlowVersions] = useState([])
+  const [rollbackVersion, setRollbackVersion] = useState('')
+  const [nodes, setNodes] = useState([])
+  const [edges, setEdges] = useState([])
+  const [selectedId, setSelectedId] = useState(null)
+  const [selectedEdgeId, setSelectedEdgeId] = useState(null)
+  const [pendingPort, setPendingPort] = useState(null)
+  const [reconnecting, setReconnecting] = useState(null)
   const [dragging, setDragging] = useState(null)
   const [search, setSearch] = useState('')
-  const [libraryOpen, setLibraryOpen] = useState(false)
-  const [inspectorOpen, setInspectorOpen] = useState(false)
-  const [connection, setConnection] = useState(null)
-  const [libraryDragOver, setLibraryDragOver] = useState(false)
-  const canvasRef = useRef(null)
-  const flowStageRef = useRef(null)
-  const zoomRef = useRef(zoom)
+  const [dirty, setDirty] = useState(false)
+  const [validation, setValidation] = useState(null)
+  const [run, setRun] = useState(null)
+  const [lastPublished, setLastPublished] = useState(null)
+  const [busy, setBusy] = useState('')
+  const [error, setError] = useState('')
+  const [zoom, setZoom] = useState(1)
 
-  const selectedNode = selected.type === 'node' ? nodes.find((node) => node.id === selected.id) : null
-  const selectedEdge = selected.type === 'edge' ? edges.find((edge) => edge.id === selected.id) : null
-  const visibleLibrary = NODE_LIBRARY.filter((item) =>
-    item.title.toLowerCase().includes(search.toLowerCase()),
-  )
-
-  const nodeMap = useMemo(
-    () => Object.fromEntries(nodes.map((node) => [node.id, node])),
-    [nodes],
-  )
+  const versions = useMemo(() => Object.fromEntries(library.map((item) => [item.id, item])), [library])
+  const selected = nodes.find((node) => node.id === selectedId)
+  const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId)
 
   useEffect(() => {
-    zoomRef.current = zoom
-  }, [zoom])
+    let active = true
+    const load = async () => {
+      const detail = await snowGrassApi.getWorkflow(workflowId)
+      const [componentItems, versionItems] = await Promise.all([
+        snowGrassApi.getComponentLibrary(),
+        snowGrassApi.listWorkflowVersions(workflowId),
+      ])
+      if (!active) return
+      const map = Object.fromEntries(componentItems.map((item) => [item.id, item]))
+      setWorkflow(detail); setLibrary(componentItems)
+      setFlowVersions(versionItems); setRollbackVersion(versionItems[0]?.id || '')
+      setNodes(detail.graph.nodes.map((node) => ({ ...node, component: map[node.component_version_id] })))
+      setEdges(detail.graph.edges); setValidation(detail.validation)
+      setSelectedId(detail.graph.nodes[0]?.id || null)
+      setSelectedEdgeId(null)
+    }
+    load().catch((reason) => setError(reason.message))
+    return () => { active = false }
+  }, [workflowId])
+
+  useEffect(() => { zoomRef.current = zoom }, [zoom])
+
+  useEffect(() => {
+    const handleDelete = (event) => {
+      if (!selectedEdgeId || !['Backspace', 'Delete'].includes(event.key) || event.target.closest('input, textarea, select')) return
+      event.preventDefault()
+      setEdges((current) => current.filter((edge) => edge.id !== selectedEdgeId))
+      setSelectedEdgeId(null); setDirty(true)
+    }
+    window.addEventListener('keydown', handleDelete)
+    return () => window.removeEventListener('keydown', handleDelete)
+  }, [selectedEdgeId])
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return undefined
-
-    const handleWheel = (event) => {
-      if (!event.ctrlKey && !event.metaKey) return
-      event.preventDefault()
+    let gesture = null
+    const clampZoom = (value) => Math.min(1.8, Math.max(.45, value))
+    const applyZoomAt = (nextZoom, clientX, clientY, baseZoom = zoomRef.current, baseScroll = null) => {
       const rect = canvas.getBoundingClientRect()
-      const pointerX = event.clientX - rect.left + canvas.scrollLeft
-      const pointerY = event.clientY - rect.top + canvas.scrollTop
-      const currentZoom = zoomRef.current
-      const nextZoom = Math.min(1.5, Math.max(.5, currentZoom - event.deltaY * .002))
-      const ratio = nextZoom / currentZoom
-
+      const focusX = clientX - rect.left
+      const focusY = clientY - rect.top
+      const scrollLeft = baseScroll?.left ?? canvas.scrollLeft
+      const scrollTop = baseScroll?.top ?? canvas.scrollTop
+      const ratio = nextZoom / baseZoom
       zoomRef.current = nextZoom
       setZoom(nextZoom)
       requestAnimationFrame(() => {
-        canvas.scrollLeft = pointerX * ratio - (event.clientX - rect.left)
-        canvas.scrollTop = pointerY * ratio - (event.clientY - rect.top)
+        canvas.scrollLeft = (scrollLeft + focusX) * ratio - focusX
+        canvas.scrollTop = (scrollTop + focusY) * ratio - focusY
       })
     }
-
-    canvas.addEventListener('wheel', handleWheel, { passive: false })
-    return () => canvas.removeEventListener('wheel', handleWheel)
-  }, [])
-
-  const updateNode = (id, changes) => {
-    setNodes((current) => current.map((node) => node.id === id ? { ...node, ...changes } : node))
-    setSaved(false)
-  }
-
-  const updateEdge = (id, changes) => {
-    setEdges((current) => current.map((edge) => edge.id === id ? { ...edge, ...changes } : edge))
-    setSaved(false)
-  }
-
-  const saveWorkflow = () => {
-    if (saved || saving) return
-    setSaving(true)
-    window.setTimeout(() => {
-      setSaved(true)
-      setSaving(false)
-    }, 650)
-  }
-
-  const addNode = (item, position) => {
-    const id = `${item.kind}-${Date.now()}`
-    const count = nodes.length
-    const node = {
-      id,
-      kind: item.kind,
-      title: item.title,
-      description: item.description,
-      x: position?.x ?? 150 + (count % 3) * 250,
-      y: position?.y ?? 500 + Math.floor(count / 3) * 130,
+    const wheel = (event) => {
+      if (!event.ctrlKey && !event.metaKey) return
+      event.preventDefault()
+      const next = clampZoom(zoomRef.current * Math.exp(-event.deltaY * .008))
+      applyZoomAt(next, event.clientX, event.clientY)
     }
-    setNodes((current) => [...current, node])
-    setSelected({ type: 'node', id })
-    setInspectorOpen(true)
-    setLibraryOpen(false)
-    setSaved(false)
+    const distance = (touches) => Math.hypot(
+      touches[0].clientX - touches[1].clientX,
+      touches[0].clientY - touches[1].clientY,
+    )
+    const touchStart = (event) => {
+      if (event.touches.length !== 2) return
+      const centerX = (event.touches[0].clientX + event.touches[1].clientX) / 2
+      const centerY = (event.touches[0].clientY + event.touches[1].clientY) / 2
+      gesture = { distance: distance(event.touches), zoom: zoomRef.current, centerX, centerY, left: canvas.scrollLeft, top: canvas.scrollTop }
+    }
+    const touchMove = (event) => {
+      if (!gesture || event.touches.length !== 2) return
+      event.preventDefault()
+      const centerX = (event.touches[0].clientX + event.touches[1].clientX) / 2
+      const centerY = (event.touches[0].clientY + event.touches[1].clientY) / 2
+      const next = clampZoom(gesture.zoom * distance(event.touches) / gesture.distance)
+      applyZoomAt(next, centerX, centerY, gesture.zoom, { left: gesture.left, top: gesture.top })
+    }
+    const touchEnd = (event) => { if (event.touches.length < 2) gesture = null }
+    canvas.addEventListener('wheel', wheel, { passive: false })
+    canvas.addEventListener('touchstart', touchStart, { passive: true })
+    canvas.addEventListener('touchmove', touchMove, { passive: false })
+    canvas.addEventListener('touchend', touchEnd, { passive: true })
+    canvas.addEventListener('touchcancel', touchEnd, { passive: true })
+    return () => {
+      canvas.removeEventListener('wheel', wheel)
+      canvas.removeEventListener('touchstart', touchStart)
+      canvas.removeEventListener('touchmove', touchMove)
+      canvas.removeEventListener('touchend', touchEnd)
+      canvas.removeEventListener('touchcancel', touchEnd)
+    }
+  }, [workflow])
+
+  const addNode = (component, position = {}) => {
+    const id = `node-${crypto.randomUUID()}`
+    const defaults = Object.fromEntries(Object.entries(component.config_schema?.properties || {}).filter(([, definition]) => definition.default !== undefined).map(([key, definition]) => [key, definition.default]))
+    setNodes((current) => [...current, { id, component_version_id: component.id,
+      name: component.component_key, config: defaults, x: position.x ?? 120,
+      y: position.y ?? 120 + current.length * 110, disabled: false, component }])
+    setSelectedId(id); setSelectedEdgeId(null); setDirty(true)
   }
-
-  const startLibraryDrag = (event, item) => {
-    event.dataTransfer.effectAllowed = 'copy'
-    event.dataTransfer.setData('application/x-sedum-node', JSON.stringify(item))
-    event.dataTransfer.setData('text/plain', item.kind)
+  const drop = (event) => {
+    event.preventDefault(); const id = event.dataTransfer.getData('component-version-id')
+    const component = versions[id]; if (!component) return
+    const rect = canvasRef.current.getBoundingClientRect()
+    addNode(component, { x: (event.clientX - rect.left) / zoom - 100, y: (event.clientY - rect.top) / zoom - 45 })
   }
-
-  const dropLibraryNode = (event) => {
-    event.preventDefault()
-    setLibraryDragOver(false)
-    if (!flowStageRef.current) return
-
-    const serialized = event.dataTransfer.getData('application/x-sedum-node')
-    const item = serialized
-      ? JSON.parse(serialized)
-      : NODE_LIBRARY.find((candidate) => candidate.kind === event.dataTransfer.getData('text/plain'))
-    if (!item) return
-
-    const stageRect = flowStageRef.current.getBoundingClientRect()
-    addNode(item, {
-      x: Math.max(24, (event.clientX - stageRect.left) / zoomRef.current - 110),
-      y: Math.max(72, (event.clientY - stageRect.top) / zoomRef.current - 48),
-    })
+  const completeConnection = (connection, node, port) => {
+    if (!connection || connection.nodeId === node.id) return false
+    const source = nodes.find((item) => item.id === connection.nodeId)
+    const sourcePort = source?.component?.output_ports.find((item) => item.key === connection.port)
+    if (sourcePort?.schema?.type !== port.schema?.type) { setError('端口类型不兼容'); return }
+    setEdges((current) => current.some((edge) => edge.source_node_id === source.id && edge.source_port === connection.port && edge.target_node_id === node.id && edge.target_port === port.key) ? current : [...current, { id: `edge-${crypto.randomUUID()}`,
+      source_node_id: source.id, source_port: connection.port,
+      target_node_id: node.id, target_port: port.key, condition: null }])
+    setPendingPort(null); setDirty(true); setError('')
+    return true
   }
-
-  const removeSelected = () => {
-    if (selectedEdge) {
-      setEdges((current) => current.filter((edge) => edge.id !== selectedEdge.id))
-      setSelected({ type: 'node', id: 'condition' })
-      setSaved(false)
+  const connect = (node, port, direction) => {
+    if (direction === 'output') { setPendingPort({ nodeId: node.id, port: port.key, dragging: false }); return }
+    completeConnection(pendingPort, node, port)
+  }
+  const stagePoint = (event) => {
+    const rect = event.currentTarget.querySelector('.v2-stage').getBoundingClientRect()
+    return { x: (event.clientX - rect.left) / zoom, y: (event.clientY - rect.top) / zoom }
+  }
+  const beginConnection = (event, node, port) => {
+    event.preventDefault(); event.stopPropagation()
+    setSelectedId(node.id); setSelectedEdgeId(null); setError('')
+    setPendingPort({ nodeId: node.id, port: port.key, dragging: true, moved: false, clientX: event.clientX, clientY: event.clientY })
+  }
+  const moveConnection = (event) => {
+    const activeReconnect = reconnectingRef.current
+    if (!pendingPort?.dragging && !activeReconnect) return
+    const cursor = stagePoint(event)
+    if (pendingPort?.dragging) setPendingPort((current) => current ? { ...current, cursor, moved: current.moved || Math.hypot(event.clientX - current.clientX, event.clientY - current.clientY) > 4 } : current)
+    if (activeReconnect) {
+      const next = {
+        ...activeReconnect,
+        cursor,
+        moved: activeReconnect.moved || Math.hypot(event.clientX - activeReconnect.clientX, event.clientY - activeReconnect.clientY) > 4,
+      }
+      reconnectingRef.current = next
+      setReconnecting(next)
+    }
+  }
+  const portAtPointer = (event, direction) => {
+    const direct = event.target.closest?.(`[data-port-direction="${direction}"]`)
+    if (direct) return direct
+    const candidates = [...canvasRef.current.querySelectorAll(`[data-port-direction="${direction}"]`)]
+    const nearest = candidates.map((element) => {
+      const rect = element.getBoundingClientRect()
+      const anchorX = direction === 'input' ? rect.left : rect.right
+      const anchorY = rect.top + rect.height / 2
+      return { element, distance: Math.hypot(event.clientX - anchorX, event.clientY - anchorY) }
+    }).sort((left, right) => left.distance - right.distance)[0]
+    return nearest?.distance <= 36 ? nearest.element : null
+  }
+  const endConnection = (event) => {
+    const activeReconnect = reconnectingRef.current
+    if (activeReconnect) {
+      if (!activeReconnect.moved) { reconnectingRef.current = null; setReconnecting(null); return }
+      const direction = activeReconnect.end === 'source' ? 'output' : 'input'
+      const target = portAtPointer(event, direction)
+      if (!target) { reconnectingRef.current = null; setReconnecting(null); return }
+      const edge = edges.find((item) => item.id === activeReconnect.edgeId)
+      const node = nodes.find((item) => item.id === target.dataset.nodeId)
+      if (!edge || !node) { reconnectingRef.current = null; setReconnecting(null); return }
+      const next = activeReconnect.end === 'source'
+        ? { ...edge, source_node_id: node.id, source_port: target.dataset.portKey }
+        : { ...edge, target_node_id: node.id, target_port: target.dataset.portKey }
+      const sourceNode = nodes.find((item) => item.id === next.source_node_id)
+      const targetNode = nodes.find((item) => item.id === next.target_node_id)
+      const sourcePort = sourceNode?.component?.output_ports.find((port) => port.key === next.source_port)
+      const targetPort = targetNode?.component?.input_ports.find((port) => port.key === next.target_port)
+      if (next.source_node_id === next.target_node_id) setError('连线不能连接到同一个节点')
+      else if (sourcePort?.schema?.type !== targetPort?.schema?.type) setError('端口类型不兼容')
+      else { setEdges((current) => current.map((item) => item.id === next.id ? next : item)); setDirty(true); setError('') }
+      reconnectingRef.current = null
+      setReconnecting(null)
       return
     }
-    if (!selectedNode || selectedNode.kind === 'trigger') return
-    setNodes((current) => current.filter((node) => node.id !== selectedNode.id))
-    setEdges((current) => current.filter((edge) => edge.from !== selectedNode.id && edge.to !== selectedNode.id))
-    setSelected({ type: 'node', id: 'trigger' })
-    setSaved(false)
+    if (!pendingPort?.dragging) return
+    const target = portAtPointer(event, 'input')
+    if (target) {
+      const node = nodes.find((item) => item.id === target.dataset.nodeId)
+      const port = node?.component?.input_ports.find((item) => item.key === target.dataset.portKey)
+      if (node && port && completeConnection(pendingPort, node, port)) return
+    }
+    setPendingPort((current) => current?.moved ? null : { nodeId: current.nodeId, port: current.port, dragging: false })
   }
-
-  const beginDrag = (event, node) => {
+  const beginEdgeReconnect = (event, edge, end) => {
+    event.preventDefault(); event.stopPropagation()
+    setSelectedId(null); setSelectedEdgeId(edge.id); setPendingPort(null); setError('')
+    const next = { edgeId: edge.id, end, moved: false, clientX: event.clientX, clientY: event.clientY }
+    reconnectingRef.current = next
+    setReconnecting(next)
+  }
+  const selectEdge = (edgeId) => { setSelectedEdgeId(edgeId); setSelectedId(null); setPendingPort(null) }
+  const removeEdge = (edgeId) => { setEdges((current) => current.filter((edge) => edge.id !== edgeId)); setSelectedEdgeId((current) => current === edgeId ? null : current); setDirty(true) }
+  const beginNodeDrag = (event, node) => {
+    if (event.target.closest('button')) return
     event.currentTarget.setPointerCapture(event.pointerId)
-    setSelected({ type: 'node', id: node.id })
-    setDragging({ id: node.id, pointerX: event.clientX, pointerY: event.clientY, x: node.x, y: node.y })
+    setDragging({ id: node.id, x: node.x, y: node.y, clientX: event.clientX, clientY: event.clientY })
   }
-
   const moveNode = (event) => {
     if (!dragging) return
-    const x = Math.max(24, dragging.x + (event.clientX - dragging.pointerX) / zoom)
-    const y = Math.max(72, dragging.y + (event.clientY - dragging.pointerY) / zoom)
-    setNodes((current) => current.map((node) => node.id === dragging.id ? { ...node, x, y } : node))
-    setSaved(false)
+    setNodes((current) => current.map((node) => node.id === dragging.id ? {
+      ...node, x: Math.max(0, dragging.x + (event.clientX - dragging.clientX) / zoom),
+      y: Math.max(0, dragging.y + (event.clientY - dragging.clientY) / zoom),
+    } : node))
+    setDirty(true)
   }
-
-  const startConnection = (event, node) => {
-    event.preventDefault()
-    event.stopPropagation()
-    setConnection({ from: node.id, x: node.x + 220, y: node.y + 48 })
-    setSelected({ type: 'node', id: node.id })
+  const save = async () => {
+    setBusy('save'); setError('')
+    try { const detail = await snowGrassApi.saveWorkflowDraft(workflowId, workflow.draft_revision, serialize(nodes, edges)); setWorkflow(detail); setValidation(detail.validation); setDirty(false) }
+    catch (reason) { setError(reason.status === 409 ? '草稿 revision 冲突，请刷新后重试。' : reason.message) }
+    finally { setBusy('') }
   }
+  const validate = async () => { setBusy('validate'); try { setValidation(await snowGrassApi.validateWorkflow(workflowId)) } catch (reason) { setError(reason.message) } finally { setBusy('') } }
+  const preview = async () => { setBusy('preview'); try { setRun(await snowGrassApi.previewWorkflow(workflowId, workflow.draft_revision, workflow.business_type === 'negative_feedback' ? { text: '预览输入' } : { period_start: new Date().toISOString() })) } catch (reason) { setError(reason.message) } finally { setBusy('') } }
+  const publish = async () => { setBusy('publish'); try { const result = await snowGrassApi.publishWorkflow(workflowId, workflow.draft_revision, { activate: false }); setLastPublished(result.version_id) } catch (reason) { setError(reason.message) } finally { setBusy('') } }
+  const deploy = async () => { if (!lastPublished) return; setBusy('deploy'); try { const result = await snowGrassApi.deployWorkflow(workflowId, lastPublished, workflow.deployed_version_id, '前端部署'); setWorkflow({ ...workflow, deployed_version_id: result.version_id }) } catch (reason) { setError(reason.message) } finally { setBusy('') } }
+  const rollback = async () => { if (!rollbackVersion) return; setBusy('rollback'); try { const result = await snowGrassApi.rollbackWorkflow(workflowId, rollbackVersion, workflow.deployed_version_id, '前端回滚'); setWorkflow({ ...workflow, deployed_version_id: result.version_id }) } catch (reason) { setError(reason.message) } finally { setBusy('') } }
+  if (!workflow) return <main className="workflow-v2"><p>{error || '加载中…'}</p></main>
 
-  const moveConnection = (event) => {
-    if (!connection || !flowStageRef.current) return
-    const rect = flowStageRef.current.getBoundingClientRect()
-    setConnection((current) => current ? {
-      ...current,
-      x: (event.clientX - rect.left) / zoomRef.current,
-      y: (event.clientY - rect.top) / zoomRef.current,
-    } : null)
-  }
-
-  const finishConnection = (event, targetNode) => {
-    event.preventDefault()
-    event.stopPropagation()
-    if (!connection || connection.from === targetNode.id) return
-
-    const existingEdge = edges.find((edge) => edge.from === connection.from && edge.to === targetNode.id)
-    if (existingEdge) {
-      setConnection(null)
-      return
-    }
-
-    const sourceNode = nodeMap[connection.from]
-    const isDecision = sourceNode?.kind === 'condition' || sourceNode?.kind === 'classifier'
-    const newEdge = {
-      id: `edge-${connection.from}-${targetNode.id}-${Date.now()}`,
-      from: connection.from,
-      to: targetNode.id,
-      label: isDecision ? '新条件' : '继续',
-      ruleType: isDecision ? 'condition' : 'always',
-      field: '',
-      operator: 'equals',
-      value: '',
-    }
-
-    setEdges((current) => [...current, newEdge])
-    setConnection(null)
-    setSaved(false)
-  }
-
-  return (
-    <div className="app-shell">
-      <main className="workspace">
-        <NodeLibrary open={libraryOpen} search={search} items={visibleLibrary} onSearch={setSearch} onAdd={addNode} onDragStart={startLibraryDrag} />
-
-        <section
-          ref={canvasRef}
-          className={`canvas-panel ${libraryDragOver ? 'is-drop-target' : ''}`}
-          aria-label="流程画布"
-          onDragOver={(event) => {
-            event.preventDefault()
-            event.dataTransfer.dropEffect = 'copy'
-            setLibraryDragOver(true)
-          }}
-          onDragLeave={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget)) setLibraryDragOver(false)
-          }}
-          onDrop={dropLibraryNode}
-        >
-          <div className="canvas-meta">
-            <div><span className="folio">02</span><h1>未命名流程</h1></div>
-            {connection
-              ? <p>选择目标节点的左侧端口完成连线</p>
-              : <WorkflowActions saved={saved} saving={saving} running={running} onSave={saveWorkflow} onToggleRun={() => setRunning((value) => !value)} />}
-          </div>
-
-          <div className="canvas-toolbar" aria-label="画布工具">
-            <button type="button" onClick={() => setZoom((value) => Math.max(.5, value - .1))} aria-label="缩小"><Icon name="zoomOut" /></button>
-            <span>{Math.round(zoom * 100)}%</span>
-            <button type="button" onClick={() => setZoom((value) => Math.min(1.5, value + .1))} aria-label="放大"><Icon name="zoomIn" /></button>
-            <button type="button" onClick={() => setZoom(1)} aria-label="恢复实际大小"><Icon name="fit" /></button>
-          </div>
-
-          {connection && (
-            <div className="connection-mode" role="status">
-              <span><Icon name="edge" size={15} />正在连线</span>
-              <strong>{nodeMap[connection.from]?.title}</strong>
-              <button type="button" onClick={() => setConnection(null)}>取消</button>
-            </div>
-          )}
-
-          <div ref={flowStageRef} className={`flow-stage ${running ? 'is-running' : ''} ${connection ? 'is-connecting' : ''}`} style={{ transform: `scale(${zoom})` }} onPointerMove={moveConnection}>
-            <svg className="connections" width="1120" height="720" aria-label="流程连线">
-              <defs>
-                <marker id="flow-arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto" markerUnits="userSpaceOnUse">
-                  <path className="arrow-default" d="M 1 1 L 11 6 L 1 11 Z" />
-                </marker>
-                <marker id="flow-arrow-active" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto" markerUnits="userSpaceOnUse">
-                  <path className="arrow-active" d="M 1 1 L 11 6 L 1 11 Z" />
-                </marker>
-              </defs>
-              {connection && nodeMap[connection.from] && (
-                <path className="connection-preview" markerEnd="url(#flow-arrow-active)" d={`M ${nodeMap[connection.from].x + 220} ${nodeMap[connection.from].y + 48} C ${nodeMap[connection.from].x + 290} ${nodeMap[connection.from].y + 48}, ${connection.x - 70} ${connection.y}, ${connection.x} ${connection.y}`} />
-              )}
-              {edges.map((edge) => {
-                const from = nodeMap[edge.from]
-                const to = nodeMap[edge.to]
-                if (!from || !to) return null
-                const labelX = (from.x + 220 + to.x) / 2
-                const labelY = (from.y + to.y) / 2 + 36
-                const isSelected = selected.type === 'edge' && selected.id === edge.id
-                const selectEdge = () => {
-                  setSelected({ type: 'edge', id: edge.id })
-                  setInspectorOpen(true)
-                }
-                return (
-                  <g key={edge.id} className={`edge-group ${isSelected ? 'is-selected' : ''}`}>
-                    <path className="connection-underlay" d={edgePath(from, to)} />
-                    <path className="connection-line" markerEnd={isSelected ? 'url(#flow-arrow-active)' : 'url(#flow-arrow)'} d={edgePath(from, to)} />
-                    <path className="connection-hit" d={edgePath(from, to)} onClick={selectEdge} />
-                    <g className="factor-badge" transform={`translate(${labelX - 28} ${labelY - 17})`} role="button" tabIndex="0" aria-label={`配置决策因子：${edge.label}`} onClick={selectEdge} onKeyDown={(event) => event.key === 'Enter' && selectEdge()}>
-                      <rect width="56" height="24" />
-                      <text x="28" y="15" textAnchor="middle">{edge.label}</text>
-                    </g>
-                  </g>
-                )
-              })}
-            </svg>
-
-            {nodes.map((node) => (
-              <div
-                key={node.id}
-                className={`flow-node is-${node.kind} ${selected.type === 'node' && selected.id === node.id ? 'is-selected' : ''}`}
-                style={{ left: node.x, top: node.y }}
-                onPointerDown={(event) => beginDrag(event, node)}
-                onPointerMove={moveNode}
-                onPointerUp={() => setDragging(null)}
-                onPointerCancel={() => setDragging(null)}
-                onClick={() => {
-                  setSelected({ type: 'node', id: node.id })
-                  setInspectorOpen(true)
-                }}
-                role="button"
-                tabIndex="0"
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    setSelected({ type: 'node', id: node.id })
-                    setInspectorOpen(true)
-                  }
-                }}
-              >
-                <span className="node-icon"><Icon name={node.kind} size={20} weight="bold" /></span>
-                <span className="node-copy"><small>{KIND_LABELS[node.kind]}</small><strong>{node.title}</strong><em>{node.description}</em></span>
-                <button className="port port-in" type="button" aria-label={`连接到${node.title}`} onPointerDown={(event) => event.stopPropagation()} onPointerUp={(event) => finishConnection(event, node)} />
-                <button className="port port-out" type="button" aria-label={`从${node.title}开始连线`} onPointerDown={(event) => startConnection(event, node)} />
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <InspectorPanel
-          open={inspectorOpen}
-          selectedNode={selectedNode}
-          selectedEdge={selectedEdge}
-          nodeMap={nodeMap}
-          kindLabels={KIND_LABELS}
-          onClose={() => setInspectorOpen(false)}
-          onRemove={removeSelected}
-          onUpdateNode={updateNode}
-          onUpdateEdge={updateEdge}
-        />
-        {(libraryOpen || inspectorOpen) && <button className="panel-scrim" type="button" aria-label="关闭面板" onClick={() => { setLibraryOpen(false); setInspectorOpen(false) }} />}
-      </main>
+  const visible = library.filter((item) => `${item.component_key} ${item.component_name} ${item.category}`.toLowerCase().includes(search.toLowerCase()))
+  return <main className="workflow-v2">
+    <div className="flow-command">
+      <div className="flow-command-title"><span className="editor-context">流程定义</span><h1>{workflow.name}</h1><small>草稿 R{workflow.draft_revision}</small><span className={`deployment-state ${workflow.deployed_version_id ? 'is-live' : ''}`}>{workflow.deployed_version_id ? '已部署' : '未部署'}</span></div>
+      <div className="flow-command-actions">
+        <Link className="flow-runs-action" to={`/runs?workflow_id=${workflowId}`}><Icon name="list" size={15} />运行记录</Link>
+        <span className={`save-indicator ${dirty ? 'dirty' : ''}`}><i />{dirty ? '有未保存修改' : '已保存'}</span>
+        <div className="flow-command-primary"><button type="button" disabled={!dirty || busy} onClick={save}><Icon name="save" size={15} />保存</button><button type="button" disabled={busy} onClick={validate}>校验</button><button className="primary" type="button" disabled={dirty || busy} onClick={preview}><Icon name="play" size={15} />运行预览</button></div>
+        <details className="release-menu"><summary>发布管理 <Icon name="more" size={16} /></summary><div><button type="button" disabled={dirty || validation?.valid === false || busy} onClick={publish}>发布新版本</button><button type="button" disabled={!lastPublished || busy} onClick={deploy}>部署已发布版本</button><label>回滚到<select aria-label="回滚版本" value={rollbackVersion} onChange={(event) => setRollbackVersion(event.target.value)}>{flowVersions.map((version) => <option key={version.id} value={version.id}>V{version.version_number}</option>)}</select></label><button className="danger" type="button" disabled={!rollbackVersion || rollbackVersion === workflow.deployed_version_id || busy} onClick={rollback}>确认回滚</button></div></details>
+      </div>
     </div>
-  )
+    {error && <div className="flow-v2-error" role="alert">{error}</div>}{validation?.valid === false && <div className="flow-v2-error">{validation.errors?.[0]?.message}</div>}
+    <div className="flow-v2-layout">
+      <NodeLibrary search={search} items={visible} onSearch={setSearch} onAdd={addNode} onDragStart={(event, item) => event.dataTransfer.setData('component-version-id', item.id)} />
+      <section ref={canvasRef} className={`v2-canvas ${pendingPort || reconnecting ? 'is-connecting' : ''}`} onDragOver={(event) => event.preventDefault()} onDrop={drop} onPointerMove={moveConnection} onPointerUp={endConnection} aria-label="DAG 画布">
+        <div className="canvas-toolbar" aria-label="画布缩放"><button type="button" onClick={() => setZoom((value) => Math.max(.45, value - .1))} aria-label="缩小"><Icon name="zoomOut" /></button><span title="触控板或双指捏合可缩放">{Math.round(zoom * 100)}%</span><button type="button" onClick={() => setZoom((value) => Math.min(1.8, value + .1))} aria-label="放大"><Icon name="zoomIn" /></button><button type="button" onClick={() => setZoom(1)} aria-label="恢复实际大小"><Icon name="fit" /></button></div>
+        {(pendingPort || reconnecting) && <div className="connect-notice">{reconnecting ? `拖到新的${reconnecting.end === 'source' ? '输出' : '输入'}端口` : '选择目标节点的输入端口'} <button type="button" onClick={() => { setPendingPort(null); reconnectingRef.current = null; setReconnecting(null) }}>取消</button></div>}
+        <div className="v2-stage" style={{ transform: `scale(${zoom})` }}>
+        <EdgeLayer nodes={nodes} edges={edges} selectedEdgeId={selectedEdgeId} pendingPort={pendingPort} reconnecting={reconnecting} onSelect={selectEdge} onDelete={removeEdge} onReconnectStart={beginEdgeReconnect} />
+        {nodes.map((node) => <article key={node.id} className={`v2-node ${selectedId === node.id ? 'is-selected' : ''}`} style={{ left: node.x, top: node.y }} onClick={() => { setSelectedId(node.id); setSelectedEdgeId(null) }} onPointerDown={(event) => beginNodeDrag(event, node)} onPointerMove={moveNode} onPointerUp={() => setDragging(null)} onPointerCancel={() => setDragging(null)}>
+          <header><span className="v2-node-icon"><Icon name={node.component?.icon || 'tool'} size={17} weight="fill" /></span><span className="v2-node-kind"><small>{node.component?.component_key || '缺失组件'}</small><strong>{node.name}</strong></span><em>V{node.component?.version_number || '?'}</em></header>
+          <div className="node-ports inputs">{node.component?.input_ports.map((port) => <button type="button" key={port.key} data-port-direction="input" data-node-id={node.id} data-port-key={port.key} onClick={(event) => { event.stopPropagation(); connect(node, port, 'input') }}><i />{port.key}</button>)}</div>
+          <div className="node-ports outputs">{node.component?.output_ports.map((port) => <button type="button" key={port.key} data-port-direction="output" data-node-id={node.id} data-port-key={port.key} onPointerDown={(event) => beginConnection(event, node, port)} onClick={(event) => event.stopPropagation()}>{port.key}<i /></button>)}</div>
+        </article>)}</div>
+      </section>
+      <InspectorPanel node={selected} selectedEdge={selectedEdge} nodes={nodes} versions={library} edges={edges.filter((edge) => edge.source_node_id === selectedId || edge.target_node_id === selectedId)} onUpdate={(changes) => { setNodes((current) => current.map((node) => node.id === selectedId ? { ...node, ...changes } : node)); setDirty(true) }} onRemove={() => { setNodes((current) => current.filter((node) => node.id !== selectedId)); setEdges((current) => current.filter((edge) => edge.source_node_id !== selectedId && edge.target_node_id !== selectedId)); setSelectedId(null); setDirty(true) }} onSelectEdge={selectEdge} onUpdateEdge={(changes) => { setEdges((current) => current.map((edge) => edge.id === selectedEdgeId ? { ...edge, ...changes } : edge)); setDirty(true) }} onRemoveEdge={removeEdge} />
+    </div><FlowRunDrawer run={run} onClose={() => setRun(null)} />
+  </main>
 }
 
 export default WorkflowPage

@@ -1,0 +1,239 @@
+:root {
+  --ui-bg: #f7f8fa;
+  --ui-panel: #ffffff;
+  --ui-panel-soft: #f4f6f8;
+  --ui-panel-hover: #eef2ff;
+  --ui-text: #17191f;
+  --ui-text-soft: #596370;
+  --ui-text-faint: #747e8b;
+  --ui-border: #e7e9ee;
+  --ui-border-strong: #d8dce3;
+  --ui-primary: #002fa7;
+  --ui-primary-soft: #eef2ff;
+  --ui-success: #45a76f;
+  --ui-success-soft: #eaf7ef;
+  --ui-warning: #d99624;
+  --ui-warning-soft: #fff6e5;
+  --ui-danger: #cf5058;
+  --ui-danger-soft: #fff1f2;
+  --ui-cyan: #43aeb9;
+  --ui-shadow: 0 8px 24px rgba(31, 43, 66, .055);
+  --ui-shadow-float: 0 18px 48px rgba(25, 35, 55, .16);
+}
+
+:root[data-theme="dark"] {
+  --ui-bg: #11151c;
+  --ui-panel: #191e27;
+  --ui-panel-soft: #202630;
+  --ui-panel-hover: #25304a;
+  --ui-text: #edf0f5;
+  --ui-text-soft: #b8c0cc;
+  --ui-text-faint: #98a3b3;
+  --ui-border: #2d3542;
+  --ui-border-strong: #404a5a;
+  --ui-primary: #7da2ff;
+  --ui-primary-soft: #202e4e;
+  --ui-success: #78ca91;
+  --ui-success-soft: #20372a;
+  --ui-warning: #e8b25b;
+  --ui-warning-soft: #3a3020;
+  --ui-danger: #ef7d84;
+  --ui-danger-soft: #3d252a;
+  --ui-cyan: #6bc7d0;
+  --ui-shadow: 0 10px 28px rgba(0, 0, 0, .16);
+  --ui-shadow-float: 0 20px 54px rgba(0, 0, 0, .4);
+  color-scheme: dark;
+}
+
+/* Theme controls are global; page geometry stays owned by each product surface. */
+.app-header-tools { display: flex; align-items: center; gap: 8px; margin-right: 14px; }
+.app-header-tools .app-environment { margin-right: 0; }
+.theme-toggle { width: 68px; height: 32px; display: grid; grid-template-columns: 1fr 1fr; align-items: center; padding: 3px; color: #858c98; border: 1px solid #e4e7ec; border-radius: 10px; background: #f5f6f8; cursor: pointer; }
+.theme-toggle span { height: 24px; display: grid; place-items: center; border-radius: 7px; }
+.theme-toggle span.is-active { color: #002fa7; background: #fff; box-shadow: 0 2px 7px rgba(31, 43, 66, .1); }
+
+/* Dark mode only changes color and elevation. It never changes page spacing or layout. */
+:root[data-theme="dark"] body,
+:root[data-theme="dark"] #root,
+:root[data-theme="dark"] .app-frame,
+:root[data-theme="dark"] .app-page,
+:root[data-theme="dark"] .definition-page,
+:root[data-theme="dark"] .knowledge-page,
+:root[data-theme="dark"] .usage-page,
+:root[data-theme="dark"] .activity-page,
+:root[data-theme="dark"] .skill-page,
+:root[data-theme="dark"] .agent-app,
+:root[data-theme="dark"] .workflow-v2,
+:root[data-theme="dark"] .management-page,
+:root[data-theme="dark"] .run-page { color: var(--ui-text); background-color: var(--ui-bg); }
+
+:root[data-theme="dark"] .app-frame { --side-panel-bg: var(--ui-panel-soft); --side-panel-line: var(--ui-border); --side-panel-hover: var(--ui-panel-hover); }
+:root[data-theme="dark"] .app-header { --nav-blue: var(--ui-primary); color: var(--ui-text); border-color: var(--ui-border); background: var(--ui-panel); }
+:root[data-theme="dark"] .app-primary-nav-item > a { color: var(--ui-text-soft); }
+:root[data-theme="dark"] .app-primary-nav-item > a:hover { color: var(--ui-text); background: var(--ui-panel-soft); }
+:root[data-theme="dark"] .app-primary-nav-item > a.is-active { color: var(--ui-primary); }
+:root[data-theme="dark"] .app-environment,
+:root[data-theme="dark"] .theme-toggle { color: var(--ui-text-soft); border-color: var(--ui-border); background: var(--ui-panel-soft); }
+:root[data-theme="dark"] .theme-toggle span.is-active { color: var(--ui-primary); background: var(--ui-panel); box-shadow: 0 2px 8px rgba(0, 0, 0, .3); }
+:root[data-theme="dark"] .flow-module-nav { border-color: var(--ui-border); background: var(--ui-panel); box-shadow: var(--ui-shadow-float); }
+:root[data-theme="dark"] .flow-module-nav a { color: var(--ui-text-soft); }
+:root[data-theme="dark"] .flow-module-nav a:hover { color: var(--ui-text); background: var(--ui-panel-soft); }
+:root[data-theme="dark"] .flow-module-nav a.is-active { color: var(--ui-primary); background: var(--ui-primary-soft); }
+:root[data-theme="dark"] .flow-module-nav small { color: var(--ui-text-faint); }
+
+:root[data-theme="dark"] .agent-app { --agent-blue: var(--ui-primary); --agent-blue-soft: var(--ui-primary-soft); --agent-ink: var(--ui-text); --agent-muted: var(--ui-text-soft); --agent-line: var(--ui-border); }
+:root[data-theme="dark"] .chat-sidebar,
+:root[data-theme="dark"] .chat-main,
+:root[data-theme="dark"] .chat-topbar,
+:root[data-theme="dark"] .conversation,
+:root[data-theme="dark"] .composer-area { color: var(--ui-text); border-color: var(--ui-border); background: var(--ui-panel); }
+:root[data-theme="dark"] .usage-summary,
+:root[data-theme="dark"] .session-item.is-active,
+:root[data-theme="dark"] .assistant-result,
+:root[data-theme="dark"] .assistant-result > header em,
+:root[data-theme="dark"] .process-trace,
+:root[data-theme="dark"] .process-trace-summary,
+:root[data-theme="dark"] .process-trace-collapse,
+:root[data-theme="dark"] .composer-shell,
+:root[data-theme="dark"] .context-usage-meter,
+:root[data-theme="dark"] .context-usage-tooltip { color: var(--ui-text); border-color: var(--ui-border); background: var(--ui-panel); }
+:root[data-theme="dark"] .backend-status,
+:root[data-theme="dark"] .starter-prompts button,
+:root[data-theme="dark"] .composer-select-label,
+:root[data-theme="dark"] .composer-knowledge-toggle,
+:root[data-theme="dark"] .process-step-meta { color: var(--ui-text-soft); border-color: var(--ui-border); background: var(--ui-panel-soft); }
+:root[data-theme="dark"] .message-bubble { color: var(--ui-text); background: var(--ui-panel-soft); }
+:root[data-theme="dark"] .message-row.is-user .message-bubble { color: #fff; background: var(--ui-primary); }
+:root[data-theme="dark"] .composer-shell textarea,
+:root[data-theme="dark"] .composer-shell select { color: var(--ui-text); }
+:root[data-theme="dark"] .markdown-document,
+:root[data-theme="dark"] .markdown-document strong { color: var(--ui-text); }
+:root[data-theme="dark"] .assistant-result > header,
+:root[data-theme="dark"] .chat-icon-button,
+:root[data-theme="dark"] .process-step-list,
+:root[data-theme="dark"] .markdown-table-wrap,
+:root[data-theme="dark"] .markdown-table-wrap th,
+:root[data-theme="dark"] .markdown-table-wrap td { border-color: var(--ui-border); }
+:root[data-theme="dark"] .assistant-result > header,
+:root[data-theme="dark"] .chat-icon-button { color: var(--ui-text); background: var(--ui-panel); }
+
+:root[data-theme="dark"] .definition-main,
+:root[data-theme="dark"] .knowledge-main,
+:root[data-theme="dark"] .usage-main,
+:root[data-theme="dark"] .activity-main,
+:root[data-theme="dark"] .definition-topbar,
+:root[data-theme="dark"] .knowledge-topbar,
+:root[data-theme="dark"] .usage-topbar,
+:root[data-theme="dark"] .activity-topbar { color: var(--ui-text); border-color: var(--ui-border); background: var(--ui-panel); }
+:root[data-theme="dark"] .definition-scroll,
+:root[data-theme="dark"] .knowledge-scroll,
+:root[data-theme="dark"] .usage-scroll,
+:root[data-theme="dark"] .activity-scroll { background-color: var(--ui-bg); background-image: radial-gradient(circle, var(--ui-border) 1px, transparent 1.05px); }
+:root[data-theme="dark"] .definition-nav button,
+:root[data-theme="dark"] .knowledge-source-nav button { color: var(--ui-text-soft); }
+:root[data-theme="dark"] .definition-nav button:hover,
+:root[data-theme="dark"] .knowledge-source-nav button:hover { color: var(--ui-text); background: var(--ui-panel-hover); }
+:root[data-theme="dark"] .definition-nav button.is-active,
+:root[data-theme="dark"] .knowledge-source-nav button.is-active { color: var(--ui-primary); background: var(--ui-panel); box-shadow: var(--ui-shadow); }
+:root[data-theme="dark"] .definition-filters,
+:root[data-theme="dark"] .definition-create,
+:root[data-theme="dark"] .knowledge-filters,
+:root[data-theme="dark"] .definition-ledger,
+:root[data-theme="dark"] .knowledge-ledger,
+:root[data-theme="dark"] .definition-metrics article,
+:root[data-theme="dark"] .knowledge-metrics article { color: var(--ui-text); border-color: var(--ui-border); background: var(--ui-panel); box-shadow: var(--ui-shadow); }
+:root[data-theme="dark"] .definition-toolbar > label,
+:root[data-theme="dark"] .definition-category-list button.is-active,
+:root[data-theme="dark"] .definition-create-popover form { color:var(--ui-text); border-color:var(--ui-border); background:var(--ui-panel); }
+:root[data-theme="dark"] .definition-toolbar input,
+:root[data-theme="dark"] .definition-toolbar select,
+:root[data-theme="dark"] .definition-create-fields input,
+:root[data-theme="dark"] .definition-create-fields select { color:var(--ui-text); border-color:var(--ui-border); background:var(--ui-panel-soft); }
+:root[data-theme="dark"] .definition-create-popover header,
+:root[data-theme="dark"] .definition-create-popover footer { border-color:var(--ui-border); }
+:root[data-theme="dark"] .definition-create-popover header button,
+:root[data-theme="dark"] .definition-create-popover footer button { color:var(--ui-text-soft); background:var(--ui-panel-soft); }
+:root[data-theme="dark"] .definition-metrics article > .icon { background:var(--ui-primary-soft); }
+:root[data-theme="dark"] .definition-filters input,
+:root[data-theme="dark"] .definition-filters select,
+:root[data-theme="dark"] .definition-create input,
+:root[data-theme="dark"] .definition-create select,
+:root[data-theme="dark"] .knowledge-filters input,
+:root[data-theme="dark"] .knowledge-filters select,
+:root[data-theme="dark"] .activity-filters input,
+:root[data-theme="dark"] .activity-filters select { color: var(--ui-text); border-color: var(--ui-border); background: var(--ui-panel-soft); }
+:root[data-theme="dark"] .workflow-ledger-head,
+:root[data-theme="dark"] .component-ledger-head,
+:root[data-theme="dark"] .knowledge-table-head,
+:root[data-theme="dark"] .activity-ledger-heading,
+:root[data-theme="dark"] .workflow-ledger-row,
+:root[data-theme="dark"] .component-ledger-row,
+:root[data-theme="dark"] .knowledge-row,
+:root[data-theme="dark"] .activity-row { color: var(--ui-text); border-color: var(--ui-border); }
+:root[data-theme="dark"] .workflow-ledger-row:hover,
+:root[data-theme="dark"] .component-ledger-row:hover,
+:root[data-theme="dark"] .knowledge-row:hover,
+:root[data-theme="dark"] .activity-row:hover { background: var(--ui-panel-soft); }
+
+:root[data-theme="dark"] .definition-edit-drawer,
+:root[data-theme="dark"] .definition-drawer-toolbar,
+:root[data-theme="dark"] .knowledge-detail,
+:root[data-theme="dark"] .component-detail,
+:root[data-theme="dark"] .detail-header,
+:root[data-theme="dark"] .detail-card,
+:root[data-theme="dark"] .detail-aside article { color: var(--ui-text); border-color: var(--ui-border); background: var(--ui-panel); }
+:root[data-theme="dark"] .definition-drawer-toolbar > button,
+:root[data-theme="dark"] .detail-actions button,
+:root[data-theme="dark"] .ledger-actions a,
+:root[data-theme="dark"] .ledger-actions button { color: var(--ui-text-soft); background: var(--ui-panel-soft); }
+:root[data-theme="dark"] .detail-card input,
+:root[data-theme="dark"] .detail-card select,
+:root[data-theme="dark"] .detail-card textarea,
+:root[data-theme="dark"] .schema-editor textarea { color: var(--ui-text); border-color: var(--ui-border); background: var(--ui-panel-soft); }
+
+:root[data-theme="dark"] .skill-catalog,
+:root[data-theme="dark"] .skill-editor,
+:root[data-theme="dark"] .skill-release-panel,
+:root[data-theme="dark"] .skill-catalog-item,
+:root[data-theme="dark"] .package-file-tree,
+:root[data-theme="dark"] .package-file-editor,
+:root[data-theme="dark"] .release-status-card,
+:root[data-theme="dark"] .release-list article { color: var(--ui-text); border-color: var(--ui-border); background: var(--ui-panel); }
+:root[data-theme="dark"] .skill-search,
+:root[data-theme="dark"] .skill-filters select,
+:root[data-theme="dark"] .skill-form-section input,
+:root[data-theme="dark"] .skill-form-section textarea,
+:root[data-theme="dark"] .skill-form-section select,
+:root[data-theme="dark"] .package-file-editor textarea { color: var(--ui-text); border-color: var(--ui-border); background: var(--ui-panel-soft); }
+:root[data-theme="dark"] .skill-catalog-item:hover,
+:root[data-theme="dark"] .skill-catalog-item.is-active,
+:root[data-theme="dark"] .package-file-tree button:hover { background: var(--ui-primary-soft); }
+
+:root[data-theme="dark"] .usage-meter,
+:root[data-theme="dark"] .usage-panel,
+:root[data-theme="dark"] .activity-summary-card,
+:root[data-theme="dark"] .activity-ledger,
+:root[data-theme="dark"] .activity-trend,
+:root[data-theme="dark"] .activity-ranking,
+:root[data-theme="dark"] .analysis-routing,
+:root[data-theme="dark"] .hourly-summary-card,
+:root[data-theme="dark"] .knowledge-base-directory article,
+:root[data-theme="dark"] .knowledge-detail > section,
+:root[data-theme="dark"] .run-page > header,
+:root[data-theme="dark"] .run-filters,
+:root[data-theme="dark"] .run-table,
+:root[data-theme="dark"] .run-table-head,
+:root[data-theme="dark"] .run-table > a,
+:root[data-theme="dark"] .run-summary > div,
+:root[data-theme="dark"] .trace-rail li > div { color: var(--ui-text); border-color: var(--ui-border); background: var(--ui-panel); }
+:root[data-theme="dark"] .run-table-head,
+:root[data-theme="dark"] .trace-rail pre,
+:root[data-theme="dark"] .activity-mode,
+:root[data-theme="dark"] .activity-view-switch { background: var(--ui-panel-soft); }
+
+@media (max-width: 760px) {
+  .app-header-tools { margin-right: 6px; }
+  .app-environment { display: none; }
+  .theme-toggle { width: 62px; }
+  .definition-edit-drawer { width: calc(100vw - 12px) !important; }
+}

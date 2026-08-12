@@ -41,10 +41,12 @@ function ChatComposer({
   selectedModelId,
   selectedSkillId,
   contextStats,
+  knowledgeEnabled,
   canSend,
   onChange,
   onModelChange,
   onSkillChange,
+  onKnowledgeChange,
   onSend,
   onStop,
 }) {
@@ -79,6 +81,16 @@ function ChatComposer({
                 <option value={model.id} key={model.id}>{model.name}{model.available ? '' : ' · 未配置'}</option>
               ))}
             </select>
+          </label>
+          <label className={`composer-knowledge-toggle ${knowledgeEnabled ? 'is-active' : ''}`}>
+            <input
+              type="checkbox"
+              checked={knowledgeEnabled}
+              disabled={busy}
+              onChange={(event) => onKnowledgeChange(event.target.checked)}
+            />
+            <Icon name="knowledge" size={15} weight={knowledgeEnabled ? 'fill' : 'regular'} />
+            <span>知识库</span>
           </label>
           <label className="composer-select-label">
             <Icon name="tool" size={15} />

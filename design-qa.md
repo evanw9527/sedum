@@ -1,9 +1,79 @@
-# Design QA
+# 流程编排与组件图标设计 QA
 
-- Reference: `codex-clipboard-1100a47f-f9b3-4f2e-b5ec-08cd0f24f0f8.png`
-- Implementation: `http://127.0.0.1:5173/`
-- Build validation: `pnpm lint` and `pnpm build` passed.
-- Runtime validation: the Vite page responds successfully after a clean server restart.
-- Visual comparison: blocked because both the in-app browser automation runtime and the Computer Use runtime exit with `Operation not permitted`; a same-viewport implementation screenshot could not be captured.
+## 对比基准
 
-final result: blocked
+- 设计真值：`/Users/tb/.codex/generated_images/019ff10c-f46f-7232-8538-42ef08f8fcef/exec-e213fb93-33c4-4be2-bc43-543f0a87f23c.png`
+- 流程实现截图：`/Users/tb/Documents/sedum/design-qa-workflow-connection-icons.jpg`
+- 图标选择器聚焦截图：`/Users/tb/Documents/sedum/design-qa-component-icon-picker.jpg`
+- 连线管理截图：`/Users/tb/Documents/sedum/design-qa-edge-management-final.jpg`
+- 连线管理对比：`/Users/tb/Documents/sedum/design-qa-edge-management-comparison.jpg`
+- 全视图对比：`/Users/tb/Documents/sedum/design-qa-workflow-connection-icons-comparison.jpg`
+- 视口：1280 × 720 CSS px，deviceScaleFactor 1
+- 源图：1487 × 1058 px；对比时按顶部焦点裁切并归一到 1280 × 720
+- 实现图：1280 × 720 px，无密度缩放
+- 状态：暗色主题、活动小时总结流程、节点属性面板；组件详情使用“生成反馈”定义
+
+## Findings
+
+当前无 P0、P1、P2 问题。
+
+### 必查表面
+
+- 字体与排版：小字号 UI 文本已提升至 9–12px 的可读区间，正文和次级文字提高字重；浅色、暗色的弱文字对比度均加强。标题、组件键、端口和说明形成清晰层级。
+- 间距与布局：保留原有三栏 DAG 编辑器比例；图标选择器采用 6 列等宽网格，未挤压草稿测试和版本台账。
+- 颜色与视觉令牌：暗色主题的编辑卡片、输入框、版本台账和图标状态均使用统一主题令牌；选中图标使用品牌蓝。
+- 图像与图标：全部使用现有 Phosphor 图标库，没有字符、Emoji、手绘 SVG 或占位图形。
+- 文案：连线提示、图标版本语义和只读组件版本语义明确。
+
+## 交互验证
+
+- 删除 `core.input → activity.normalize` 的原有连接后，从输出端口拖到输入端口，相关连线重新出现，验证通过。
+- 拖拽过程显示实时虚线；连接模式下输入端口高亮。
+- 点选输出端口、再点输入端口的兼容交互仍保留。
+- 图标选择器展示 12 个默认图标；“输出”选择态切换成功。
+- 系统组件旧数据会回填默认图标；发布版本接口返回固定图标。
+- 组件库、画布节点和属性面板读取组件版本图标。
+- 浏览器日志无 error 或 warning，仅有 Vite 与 React 开发提示。
+
+### 连线管理与条件分支验收
+
+- 点击连线后，线上显示条件入口、删除按钮和来源/目标端点。
+- 线上删除按钮实际删除连线，连线数量由 5 减至 4；键盘 Delete / Backspace 同样可用。
+- 拖动目标端点从“规范化.payload”改接到“噪声过滤.events”，右侧来源/目标信息同步更新，验证通过。
+- 直接从已选中连线的后半段拖回目标输入端口，拖拽完成、连接提示消失且草稿进入“有未保存修改”状态，验证通过。
+- 单击连线仅完成选中，草稿仍为“已保存”；超过 4px 的真实拖动才进入改接，避免点击误改。
+- 连线线身命中宽度提升到 20px，两端额外提供 32px 透明拖拽热区；快速按下拖动使用同步引用记录改接状态。
+- 条件模式支持字段路径、11 种安全运算符和文本/数字/布尔/JSON 比较值。
+- 条件保存为流程边定义；执行器单元测试覆盖嵌套字段、包含、存在性和条件不成立时分支不可达。
+
+## Comparison History
+
+1. P0：流程连线仅支持隐蔽的点击顺序，用户按常规拖拽操作无法完成连接。
+   - 修复：增加输出端口按下、实时指针连线、输入端口落点检测、类型校验和重复边保护。
+   - 复核：浏览器实际删除并拖拽恢复一条连接，通过。
+2. P1：组件定义缺少图标选择与版本语义。
+   - 修复：增加 12 个默认图标选择器；图标写入草稿、不可变组件版本，并贯穿组件库、节点和检查器。
+   - 复核：选择态切换、系统图标回填及接口返回通过。
+3. P1：首次暗色复核时，组件详情卡片仍使用白色背景且文字继承浅色值，形成低对比度。
+   - 修复：补齐详情头部、实现卡、测试卡、Schema、版本台账和输入控件的暗色主题覆盖。
+   - 复核：聚焦截图中文字与控件对比度恢复，未发现新的 P2 问题。
+4. P2：流程与组件管理页面的小字偏轻、弱文字颜色偏淡。
+   - 修复：统一提高小字字号、关键字重和浅/暗主题弱文字对比度。
+   - 复核：全视图与聚焦图均通过。
+5. P0：连线建立后无法从画布直接删除，也无法拖动端点改接。
+   - 修复：增加可点击的宽命中区、线上操作条、键盘删除和两端拖拽连接点；端口落点使用 28px 吸附范围。
+   - 复核：浏览器实际执行线上删除与目标端点改接，通过。
+6. P0：连线没有执行条件，不能表达运行时分支。
+   - 修复：边定义增加安全条件结构，右侧提供可视化编辑；执行器在传播输出前判断条件。
+   - 复核：界面条件标签与编辑状态正确，后端 52 项测试通过，其中包含真假分支执行测试。
+7. P0：连线可以选中和删除，但线身本身不能拖动，端点热区也过小。
+   - 修复：线身前、后半段分别映射到来源端和目标端改接；命中宽度由 16px 增至 20px，两端增加 32px 热区，并用同步引用消除快速拖动时的状态延迟；4px 移动阈值区分选择与拖动。
+   - 复核：内置浏览器真实指针单击后草稿保持“已保存”；再拖动后半段到输入端口，连接提示正常结束、边保持选中、草稿变为“有未保存修改”，控制台无 error 或 warning。
+
+## Follow-up Polish
+
+- P3：可在后续加入用户自定义图标包或品牌图标上传，本轮默认图标已经覆盖常见流程节点类型。
+
+## Final Result
+
+final result: passed

@@ -132,6 +132,7 @@ function AgentPage() {
   const [activeSessionId, setActiveSessionId] = useState(null)
   const [selectedModelId, setSelectedModelId] = useState('')
   const [selectedSkillId, setSelectedSkillId] = useState(AUTO_SKILL_ID)
+  const [knowledgeEnabled, setKnowledgeEnabled] = useState(false)
   const [error, setError] = useState('')
   const [connection, setConnection] = useState({ status: 'loading', message: '正在连接 Snow Grass' })
   const [reloadToken, setReloadToken] = useState(0)
@@ -184,6 +185,7 @@ function AgentPage() {
         setActiveSessionId(targetSession.id)
         setSelectedModelId(targetSession.model_id)
         setSelectedSkillId(targetSession.skill_id || AUTO_SKILL_ID)
+        setKnowledgeEnabled(Boolean(targetSession.knowledge_enabled))
         const [history, memory] = await Promise.all([
           snowGrassApi.listMessages(targetSession.id),
           snowGrassApi.getSessionMemory(targetSession.id).catch(() => null),
@@ -227,6 +229,7 @@ function AgentPage() {
     setActiveSessionId(null)
     setContextStats(null)
     setSelectedSkillId(AUTO_SKILL_ID)
+    setKnowledgeEnabled(false)
     followOutputRef.current = true
   }
 
@@ -240,6 +243,7 @@ function AgentPage() {
     setActiveSessionId(sessionId)
     setSelectedModelId(session.model_id)
     setSelectedSkillId(session.skill_id || AUTO_SKILL_ID)
+    setKnowledgeEnabled(Boolean(session.knowledge_enabled))
     setLoadingSession(true)
     setError('')
     setContextStats(null)
@@ -272,6 +276,21 @@ function AgentPage() {
     abortRef.current?.abort()
   }
 
+  const changeKnowledge = async (enabled) => {
+    const previous = knowledgeEnabled
+    setKnowledgeEnabled(enabled)
+    if (!activeSessionId) return
+    try {
+      const updated = await snowGrassApi.updateSessionKnowledge(activeSessionId, enabled)
+      setSessions((current) => current.map((session) => (
+        session.id === updated.id ? updated : session
+      )))
+    } catch (requestError) {
+      setKnowledgeEnabled(previous)
+      setError(requestError.message)
+    }
+  }
+
   const sendMessage = async () => {
     const prompt = input.trim()
     if (!prompt || busy || !selectedModel) return
@@ -293,6 +312,7 @@ function AgentPage() {
           title,
           modelId: selectedModelId,
           skillId: selectedSkillId === AUTO_SKILL_ID ? null : selectedSkillId,
+          knowledgeEnabled,
         })
         sessionId = created.id
         setActiveSessionId(created.id)
@@ -309,6 +329,7 @@ function AgentPage() {
         content: prompt,
         modelId: selectedModelId,
         skillId: selectedSkillId === AUTO_SKILL_ID ? null : selectedSkillId,
+        knowledgeEnabled,
         signal: controller.signal,
         onEvent: ({ type, data }) => {
           if (type === 'run.started') {
@@ -552,10 +573,12 @@ function AgentPage() {
             selectedModelId={selectedModelId}
             selectedSkillId={selectedSkillId}
             contextStats={contextStats}
+            knowledgeEnabled={knowledgeEnabled}
             canSend={connection.status === 'connected' && Boolean(selectedModel)}
             onChange={setInput}
             onModelChange={changeModel}
             onSkillChange={setSelectedSkillId}
+            onKnowledgeChange={changeKnowledge}
             onSend={sendMessage}
             onStop={stopGeneration}
           />

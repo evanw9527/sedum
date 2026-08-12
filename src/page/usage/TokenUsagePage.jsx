@@ -3,7 +3,7 @@ import { snowGrassApi } from '../../api/snowGrassApi.js'
 import Icon from '../../shared/ui/Icon.jsx'
 import '../../styles/usage.css'
 
-const PERIODS = [7, 30, 90]
+const PERIODS = [1, 7, 30, 90]
 
 function localDateKey(date) {
   const year = date.getFullYear()
@@ -28,6 +28,11 @@ function formatDate(value) {
   return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(new Date(`${value}T00:00:00`))
 }
 
+function getSourcePresentation(source) {
+  if (source.id === 'codex') return { icon: 'agent', tone: 'blue' }
+  return { icon: 'flow', tone: 'green' }
+}
+
 function DailyChart({ points }) {
   const max = Math.max(...points.map((point) => point.total_tokens), 1)
   return (
@@ -46,8 +51,10 @@ function DailyChart({ points }) {
 function SourceRow({ source, total }) {
   const ratio = total ? (source.total_tokens / total) * 100 : 0
   const recordLabel = source.id === 'codex' ? '个任务' : '个会话'
+  const presentation = getSourcePresentation(source)
   return (
     <div className="usage-source-row">
+      <span className={`usage-source-icon is-${presentation.tone}`}><Icon name={presentation.icon} size={18} weight="bold" /></span>
       <div><strong>{source.name}</strong><span>{source.available ? `${source.sessions} ${recordLabel}` : '未找到本地数据'}</span></div>
       <div className="usage-source-value" title={`${formatExact(source.total_tokens)} Token`}>{formatTokens(source.total_tokens)}<span>{ratio.toFixed(1)}%</span></div>
       <div className="usage-source-track"><i style={{ width: `${ratio}%` }} /></div>
@@ -92,18 +99,35 @@ function TokenUsagePage() {
 
   return (
     <main className="usage-page">
-      <header className="usage-hero">
-        <div>
-          <p>本地 AI 使用统计</p>
-          <h1>Token 用量</h1>
-        </div>
-        <div className="usage-actions">
+      <aside className="usage-sidebar side-panel">
+        <header className="side-panel-heading usage-sidebar-heading"><div><strong>用量</strong><span>本地统计</span></div></header>
+        <section className="usage-period-section">
+          <header><Icon name="history" size={14} /><strong>统计周期</strong></header>
           <div className="usage-period" aria-label="统计周期">
-            {PERIODS.map((days) => <button className={period === days ? 'is-active' : ''} key={days} type="button" onClick={() => setPeriod(days)}>{days} 天</button>)}
+            {PERIODS.map((days) => <button className={period === days ? 'is-active' : ''} key={days} type="button" onClick={() => setPeriod(days)}><span>{days}</span><small>天</small></button>)}
           </div>
+        </section>
+        {data && <section className="usage-sidebar-sources">
+          <header><Icon name="flow" size={14} /><strong>数据来源</strong></header>
+          {data.sources.map((source) => {
+            const presentation = getSourcePresentation(source)
+            return <div className="usage-sidebar-source" key={source.id}>
+              <span className={`is-${presentation.tone}`}><Icon name={presentation.icon} size={15} weight="bold" /></span>
+              <div><strong>{source.name}</strong><small>{source.available ? `${source.sessions} 条记录` : '暂无数据'}</small></div>
+              <b>{formatTokens(source.total_tokens)}</b>
+            </div>
+          })}
+        </section>}
+        <p className="usage-local-note"><Icon name="success" size={15} weight="bold" /><span><strong>仅统计本地数据</strong><small>Codex 任务日志与 Snow Grass 模型消息</small></span></p>
+      </aside>
+
+      <section className="usage-main">
+        <header className="usage-topbar">
+          <div><span className="usage-topbar-icon"><Icon name="usage" size={18} weight="bold" /></span><div><h1>Token 用量</h1><p>查看本地 AI 使用趋势、来源和项目分布</p></div></div>
           <button className="usage-refresh" type="button" onClick={loadUsage} disabled={loading}><Icon name={loading ? 'loading' : 'history'} size={16} />刷新</button>
-        </div>
-      </header>
+        </header>
+
+        <div className="usage-scroll">
 
       {error && <div className="usage-error" role="alert"><span>{error}</span><button type="button" onClick={loadUsage}>重试</button></div>}
       {!error && loading && !data && <div className="usage-loading"><Icon name="loading" size={20} />正在读取本地统计…</div>}
@@ -116,15 +140,15 @@ function TokenUsagePage() {
             <small>Token</small>
           </div>
           <div className="usage-summary-stats">
-            <div><span>记录</span><strong>{formatExact(data.sessions)}</strong></div>
-            <div><span>日均</span><strong title={`${formatExact(average)} Token`}>{formatTokens(average)}</strong></div>
-            <div><span>峰值日</span><strong title={peak.date || undefined}>{peak.total_tokens ? formatTokens(peak.total_tokens) : '—'}</strong></div>
+            <div><span className="usage-stat-icon is-green"><Icon name="chats" size={16} weight="bold" /></span><p><span>记录</span><strong>{formatExact(data.sessions)}</strong></p></div>
+            <div><span className="usage-stat-icon is-cyan"><Icon name="activity" size={16} weight="bold" /></span><p><span>日均</span><strong title={`${formatExact(average)} Token`}>{formatTokens(average)}</strong></p></div>
+            <div><span className="usage-stat-icon is-orange"><Icon name="usage" size={16} weight="bold" /></span><p><span>峰值日</span><strong title={peak.date || undefined}>{peak.total_tokens ? formatTokens(peak.total_tokens) : '—'}</strong></p></div>
           </div>
         </section>
 
         <section className="usage-grid usage-overview-grid">
           <article className="usage-panel usage-trend-panel">
-            <div className="usage-panel-heading"><div><span>按日归集</span><h2>使用趋势</h2></div><p>Codex 增量事件按上海自然日归集</p></div>
+            <div className="usage-panel-heading"><div><span>按日归集</span><h2>使用趋势</h2></div><p>Codex 与 Snow Grass 按上海自然日归集</p></div>
             <DailyChart points={chartPoints} />
           </article>
           <article className="usage-panel usage-source-panel">
@@ -149,8 +173,10 @@ function TokenUsagePage() {
             </div>
           </article>
         </section>
-        <footer className="usage-note">Codex Token 从本机任务日志增量采集并持久化，按事件发生时间统计；输入量包含任务上下文的重复计入。更新时间：{new Date(data.updated_at).toLocaleString('zh-CN')}</footer>
+        <footer className="usage-note">Codex Token 从本机任务日志增量采集，Snow Grass Token 从模型消息记录统计；所有来源统一按上海自然日归集。更新时间：{new Date(data.updated_at).toLocaleString('zh-CN')}</footer>
       </div>}
+        </div>
+      </section>
     </main>
   )
 }

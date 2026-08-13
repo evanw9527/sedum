@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { snowGrassApi } from '../../api/snowGrassApi.js'
+import ExecutionRecordsDrawer from '../../component/workflow/components/ExecutionRecordsDrawer.jsx'
+import ExecutionTraceDrawer from '../../component/workflow/components/ExecutionTraceDrawer.jsx'
 import Icon from '../../shared/ui/Icon.jsx'
 import '../../styles/component.css'
+import '../../styles/workflow.css'
 
 function WorkflowListPage() {
   const navigate = useNavigate()
@@ -13,6 +16,16 @@ function WorkflowListPage() {
   const [status, setStatus] = useState('')
   const [creating, setCreating] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
+  const [recordsOpen, setRecordsOpen] = useState(false)
+  const [recordsWorkflow, setRecordsWorkflow] = useState(null)
+  const [records, setRecords] = useState([])
+  const [recordsAggregate, setRecordsAggregate] = useState({ total: 0, succeeded: 0, failed: 0 })
+  const [recordsTotal, setRecordsTotal] = useState(0)
+  const [recordsPage, setRecordsPage] = useState(1)
+  const [recordsFilter, setRecordsFilter] = useState('all')
+  const [recordsLoading, setRecordsLoading] = useState(false)
+  const [traceRun, setTraceRun] = useState(null)
+  const [traceLoading, setTraceLoading] = useState(false)
   const [error, setError] = useState('')
 
   const load = useCallback(() => Promise.all([
@@ -24,6 +37,33 @@ function WorkflowListPage() {
 
   useEffect(() => { load().catch((reason) => setError(reason.message)) }, [load])
 
+  useEffect(() => {
+    if (!recordsOpen && !traceRun) return undefined
+    const close = (event) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      if (traceRun) setTraceRun(null)
+      else setRecordsOpen(false)
+    }
+    window.addEventListener('keydown', close, true)
+    return () => window.removeEventListener('keydown', close, true)
+  }, [recordsOpen, traceRun])
+
+  useEffect(() => {
+    if (!recordsOpen) return undefined
+    let active = true
+    setRecordsLoading(true)
+    const statusFilter = ['succeeded', 'failed'].includes(recordsFilter) ? recordsFilter : ''
+    const preview = recordsFilter === 'preview' ? true : recordsFilter === 'formal' ? false : ''
+    const startedAfter = new Date(Date.now() - 30 * 86400000).toISOString()
+    snowGrassApi.listWorkflowRuns({ workflowId: recordsWorkflow?.id || '', status: statusFilter, preview, startedAfter, limit: 10, offset: (recordsPage - 1) * 10 })
+      .then((result) => { if (active) { setRecords(result.items); setRecordsTotal(result.total); setRecordsAggregate(result.aggregate) } })
+      .catch((reason) => { if (active) setError(reason.message) })
+      .finally(() => { if (active) setRecordsLoading(false) })
+    return () => { active = false }
+  }, [recordsOpen, recordsWorkflow, recordsPage, recordsFilter])
+
   const visibleItems = useMemo(() => items.filter((item) => {
     const matchesQuery = !query || `${item.name} ${item.id}`.toLowerCase().includes(query.toLowerCase())
     const matchesBusiness = !businessType || item.business_type === businessType
@@ -33,6 +73,18 @@ function WorkflowListPage() {
 
   const deployedCount = items.filter((item) => item.deployed_version_id).length
   const activeCount = items.filter((item) => item.status !== 'archived').length
+  const openRecords = (workflow = null) => {
+    setRecordsWorkflow(workflow)
+    setRecordsPage(1)
+    setRecordsFilter('all')
+    setRecordsOpen(true)
+  }
+  const openTrace = async (run) => {
+    setTraceRun(run); setTraceLoading(true)
+    try { setTraceRun(await snowGrassApi.getWorkflowRun(run.run_id)) }
+    catch (reason) { setError(reason.message) }
+    finally { setTraceLoading(false) }
+  }
 
   const create = async (event) => {
     event.preventDefault()
@@ -78,7 +130,7 @@ function WorkflowListPage() {
       <main className="definition-main">
         <header className="definition-topbar">
           <div><span className="definition-topbar-icon"><Icon name="flow" size={18} weight="fill" /></span><div><h1>流程编排</h1><p>定义、发布并部署由组件版本组成的 DAG</p></div></div>
-          <div className="definition-top-actions"><Link to="/runs"><Icon name="history" size={15} />全部运行记录</Link><button className="definition-create-trigger" type="button" onClick={() => setCreateOpen(true)}><Icon name="plus" size={15} />新建流程</button></div>
+          <div className="definition-top-actions"><button className="definition-records-trigger" type="button" onClick={() => openRecords()}><Icon name="history" size={15} />全部执行记录</button><button className="definition-create-trigger" type="button" onClick={() => setCreateOpen(true)}><Icon name="plus" size={15} />新建流程</button></div>
         </header>
         <div className="definition-scroll">
           {error && <div className="definition-message is-error">{error}<button type="button" onClick={() => setError('')}>关闭</button></div>}
@@ -101,13 +153,15 @@ function WorkflowListPage() {
               <strong>R{item.draft_revision}</strong>
               <strong>{item.latest_version ? `V${item.latest_version}` : '—'}</strong>
               <span className={`definition-status ${item.deployed_version_id ? 'is-active' : ''}`}><i />{item.deployed_version_id ? '已部署' : '未部署'}</span>
-              <div className="ledger-actions"><Link to={`/workflows/${item.id}`}>编辑</Link><Link to={`/runs?workflow_id=${item.id}`}>运行记录</Link><button type="button" onClick={() => copy(item)}>复制</button><button className="is-danger" type="button" onClick={() => archive(item)}>{item.status === 'archived' ? '恢复' : '归档'}</button></div>
+              <div className="ledger-actions"><Link to={`/workflows/${item.id}`}>编辑</Link><button type="button" onClick={() => openRecords(item)}>执行记录</button><button type="button" onClick={() => copy(item)}>复制</button><button className="is-danger" type="button" onClick={() => archive(item)}>{item.status === 'archived' ? '恢复' : '归档'}</button></div>
             </div>)}
             {visibleItems.length === 0 && <div className="definition-empty">没有符合条件的流程。</div>}
           </section>
           {createOpen && <div className="definition-create-popover"><form onSubmit={create}><header><div><strong>新建流程</strong><small>选择业务类型后进入 DAG 编排。</small></div><button type="button" aria-label="关闭新建流程" onClick={() => setCreateOpen(false)}><Icon name="close" size={15} /></button></header><div className="definition-create-fields"><label>流程名称<input name="name" placeholder="例如：活动小时摘要" required /></label><label>业务类型<select name="business_type">{packs.map((pack) => <option key={pack.business_type} value={pack.business_type}>{pack.title}</option>)}</select></label></div><footer><button type="button" onClick={() => setCreateOpen(false)}>取消</button><button className="primary" type="submit" disabled={creating}>{creating ? '创建中' : '创建并编排'}</button></footer></form></div>}
         </div>
       </main>
+      <ExecutionRecordsDrawer open={recordsOpen} workflowName={recordsWorkflow?.name || '全部流程'} runs={records} loading={recordsLoading} aggregate={recordsAggregate} total={recordsTotal} page={recordsPage} pageSize={10} filter={recordsFilter} onFilterChange={(value) => { setRecordsFilter(value); setRecordsPage(1) }} onPageChange={setRecordsPage} onClose={() => setRecordsOpen(false)} onSelect={openTrace} />
+      <ExecutionTraceDrawer run={traceRun} loading={traceLoading} onClose={() => setTraceRun(null)} />
     </div>
   )
 }

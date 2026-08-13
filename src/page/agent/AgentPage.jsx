@@ -8,6 +8,14 @@ import MessageTimeline from '../../component/agent/components/MessageTimeline.js
 import { snowGrassApi } from '../../api/snowGrassApi.js'
 
 const AUTO_SKILL_ID = 'auto'
+const DEFAULT_RUNTIMES = [{
+  id: 'native',
+  name: '自研 Agent',
+  description: 'Snow Grass 自研 AgentRunner',
+  available: true,
+  capabilities: ['tool_loop', 'skill', 'knowledge', 'session'],
+  unavailable_reason: null,
+}]
 const EMPTY_USAGE_SUMMARY = {
   period_days: 30,
   input_tokens: 0,
@@ -18,13 +26,15 @@ const EMPTY_USAGE_SUMMARY = {
   by_model: [],
 }
 
-function toUiMessages(messages) {
+function toUiMessages(messages, runtimeId = 'native') {
   return messages.map((message) => ({
     id: message.id,
     role: message.role,
     content: message.content,
     modelId: message.model_id,
     skillId: message.skill_id,
+    runtimeId,
+    runtimeName: runtimeId === 'openai-agents' ? 'OpenAI Agents SDK' : '自研 Agent',
     steps: [],
     status: 'completed',
   }))
@@ -55,7 +65,7 @@ function traceStepId(data) {
 
 function traceStepType(step) {
   if (step === 'select_skill') return 'skill'
-  if (step === 'execute_skill_script') return 'tool'
+  if (step === 'execute_skill_script' || step === 'execute_tool') return 'tool'
   return 'tool'
 }
 
@@ -83,23 +93,25 @@ function formatCacheTime(value) {
 }
 
 function startedStep(data, startedAt, fallbackSkill = null) {
-  const isScript = data.step === 'execute_skill_script'
-  const skill = isScript ? {
+  const isTool = data.step === 'execute_skill_script' || data.step === 'execute_tool'
+  const skill = isTool ? {
     id: data.skill_id || fallbackSkill?.id,
     name: data.skill_name || fallbackSkill?.name,
     version: data.skill_version || fallbackSkill?.version,
   } : null
   const scriptName = data.script?.split('/').at(-1)
+  const toolName = data.tool_name || (scriptName ? 'run_skill_script' : null)
   return {
     id: traceStepId(data),
     type: traceStepType(data.step),
     label: data.label || data.step,
-    detail: isScript
-      ? [skill?.name, scriptName].filter(Boolean).join(' · ') || '正在运行已发布脚本'
+    detail: isTool
+      ? [toolName, scriptName].filter(Boolean).join(' · ') || '正在调用授权 Tool'
       : '正在匹配可用 Skill',
     status: 'running',
     startedAt,
-    meta: isScript ? {
+    meta: isTool ? {
+      ...(toolName ? { Tool: toolName } : {}),
       ...(skill?.name ? { Skill: skill.name } : {}),
       ...(skill?.id ? { 技能ID: skill.id } : {}),
       ...(skill?.version ? { 版本: skill.version } : {}),
@@ -122,6 +134,7 @@ function thinkingStep(id, detail, startedAt) {
 function AgentPage() {
   const [models, setModels] = useState([])
   const [skills, setSkills] = useState([])
+  const [runtimes, setRuntimes] = useState(DEFAULT_RUNTIMES)
   const [sessions, setSessions] = useState([])
   const [usageSummary, setUsageSummary] = useState(EMPTY_USAGE_SUMMARY)
   const [contextStats, setContextStats] = useState(null)
@@ -132,8 +145,10 @@ function AgentPage() {
   const [activeSessionId, setActiveSessionId] = useState(null)
   const [selectedModelId, setSelectedModelId] = useState('')
   const [selectedSkillId, setSelectedSkillId] = useState(AUTO_SKILL_ID)
+  const [selectedRuntimeId, setSelectedRuntimeId] = useState('native')
   const [knowledgeEnabled, setKnowledgeEnabled] = useState(false)
   const [error, setError] = useState('')
+  const [runtimeNotice, setRuntimeNotice] = useState('')
   const [connection, setConnection] = useState({ status: 'loading', message: '正在连接 Snow Grass' })
   const [reloadToken, setReloadToken] = useState(0)
   const abortRef = useRef(null)
@@ -144,6 +159,7 @@ function AgentPage() {
 
   const activeSession = sessions.find((session) => session.id === activeSessionId)
   const selectedModel = models.find((model) => model.id === selectedModelId)
+  const selectedRuntime = runtimes.find((runtime) => runtime.id === selectedRuntimeId)
   const compatibleSkills = skills.filter((skill) => (
     skill.enabled && (!skill.allowed_models.length || skill.allowed_models.includes(selectedModelId))
   ))
@@ -154,10 +170,11 @@ function AgentPage() {
       setConnection({ status: 'loading', message: '正在连接 Snow Grass' })
       setError('')
       try {
-        const [, modelCatalog, skillCatalog, sessionList, usage] = await Promise.all([
+        const [, modelCatalog, skillCatalog, runtimeCatalog, sessionList, usage] = await Promise.all([
           snowGrassApi.health(),
           snowGrassApi.listModels(),
           snowGrassApi.listSkills(),
+          snowGrassApi.listAgentRuntimes().catch(() => DEFAULT_RUNTIMES),
           snowGrassApi.listSessions(),
           snowGrassApi.usageSummary(),
         ])
@@ -165,6 +182,7 @@ function AgentPage() {
 
         setModels(modelCatalog)
         setSkills(skillCatalog)
+        setRuntimes(runtimeCatalog.length ? runtimeCatalog : DEFAULT_RUNTIMES)
         setSessions(sessionList)
         setUsageSummary(usage)
         setSelectedModelId((current) => (
@@ -185,13 +203,14 @@ function AgentPage() {
         setActiveSessionId(targetSession.id)
         setSelectedModelId(targetSession.model_id)
         setSelectedSkillId(targetSession.skill_id || AUTO_SKILL_ID)
+        setSelectedRuntimeId(targetSession.runtime_id || 'native')
         setKnowledgeEnabled(Boolean(targetSession.knowledge_enabled))
         const [history, memory] = await Promise.all([
           snowGrassApi.listMessages(targetSession.id),
           snowGrassApi.getSessionMemory(targetSession.id).catch(() => null),
         ])
         if (!cancelled) {
-          setMessages(history.length ? toUiMessages(history) : INITIAL_MESSAGES)
+          setMessages(history.length ? toUiMessages(history, targetSession.runtime_id) : INITIAL_MESSAGES)
           setContextStats(memory?.last_context_stats || null)
         }
       } catch (requestError) {
@@ -226,6 +245,7 @@ function AgentPage() {
     setMessages(INITIAL_MESSAGES)
     setInput('')
     setError('')
+    setRuntimeNotice('')
     setActiveSessionId(null)
     setContextStats(null)
     setSelectedSkillId(AUTO_SKILL_ID)
@@ -243,9 +263,11 @@ function AgentPage() {
     setActiveSessionId(sessionId)
     setSelectedModelId(session.model_id)
     setSelectedSkillId(session.skill_id || AUTO_SKILL_ID)
+    setSelectedRuntimeId(session.runtime_id || 'native')
     setKnowledgeEnabled(Boolean(session.knowledge_enabled))
     setLoadingSession(true)
     setError('')
+    setRuntimeNotice('')
     setContextStats(null)
     followOutputRef.current = true
     try {
@@ -254,7 +276,7 @@ function AgentPage() {
         snowGrassApi.getSessionMemory(sessionId).catch(() => null),
       ])
       if (sessionRequestRef.current === requestId) {
-        setMessages(history.length ? toUiMessages(history) : INITIAL_MESSAGES)
+        setMessages(history.length ? toUiMessages(history, session.runtime_id) : INITIAL_MESSAGES)
         setContextStats(memory?.last_context_stats || null)
       }
     } catch (requestError) {
@@ -270,6 +292,24 @@ function AgentPage() {
     if (nextSkill?.allowed_models.length && !nextSkill.allowed_models.includes(modelId)) {
       setSelectedSkillId(AUTO_SKILL_ID)
     }
+  }
+
+  const changeRuntime = (runtimeId) => {
+    if (busy || runtimeId === selectedRuntimeId) return
+    const runtime = runtimes.find((item) => item.id === runtimeId)
+    if (!runtime?.available) return
+    setSelectedRuntimeId(runtimeId)
+    setError('')
+    if (!activeSessionId) {
+      setRuntimeNotice('')
+      return
+    }
+    sessionRequestRef.current += 1
+    setActiveSessionId(null)
+    setMessages(INITIAL_MESSAGES)
+    setContextStats(null)
+    setRuntimeNotice(`已切换到${runtime.name}，发送后将创建新对话；原会话保持不变。`)
+    followOutputRef.current = true
   }
 
   const stopGeneration = () => {
@@ -313,9 +353,11 @@ function AgentPage() {
           modelId: selectedModelId,
           skillId: selectedSkillId === AUTO_SKILL_ID ? null : selectedSkillId,
           knowledgeEnabled,
+          runtimeId: selectedRuntimeId,
         })
         sessionId = created.id
         setActiveSessionId(created.id)
+        setRuntimeNotice('')
         setSessions((current) => [created, ...current])
       }
 
@@ -340,6 +382,8 @@ function AgentPage() {
               id: assistantId,
               role: 'assistant',
               content: '',
+              runtimeId: data.runtime_id || selectedRuntimeId,
+              runtimeName: data.runtime_name || runtimes.find((runtime) => runtime.id === selectedRuntimeId)?.name,
               steps: [thinkingStep(`thinking:start:${assistantId}`, '正在理解问题', startedAt)],
               startedAt,
               pending: true,
@@ -362,24 +406,24 @@ function AgentPage() {
             const selectedSkill = skills.find((skill) => skill.id === data.skill_id)
             const completedAt = eventTimestamp(data)
             const completedId = traceStepId(data)
-            const isScript = data.step === 'execute_skill_script'
+            const isTool = data.step === 'execute_skill_script' || data.step === 'execute_tool'
             setMessages((current) => replaceMessage(current, assistantId, (message) => {
-              const scriptSkillName = data.skill_name || message.activeSkill?.name
               const scriptName = data.script?.split('/').at(-1)
               const cacheInfo = cacheStatusInfo(data.cache_status)
               const completedSteps = (message.steps || []).map((step) => step.id === completedId ? {
                 ...step,
-                detail: isScript
-                  ? [scriptSkillName, scriptName].filter(Boolean).join(' · ')
+                detail: isTool
+                  ? [data.tool_name, scriptName].filter(Boolean).join(' · ') || 'Tool 执行完成'
                   : (selectedSkill ? `已选择 ${selectedSkill.name}` : '未匹配到专用 Skill'),
-                cacheStatus: isScript ? data.cache_status : null,
-                cacheLabel: isScript ? cacheInfo?.label : null,
+                cacheStatus: isTool ? data.cache_status : null,
+                cacheLabel: isTool ? cacheInfo?.label : null,
                 status: data.ok === false ? 'error' : 'completed',
                 completedAt,
                 durationMs: Number.isFinite(data.duration_ms)
                   ? data.duration_ms
                   : Math.max(0, completedAt - step.startedAt),
-                meta: isScript ? {
+                meta: isTool ? {
+                  ...(data.tool_name ? { Tool: data.tool_name } : {}),
                   ...(data.skill_name || message.activeSkill?.name ? { Skill: data.skill_name || message.activeSkill.name } : {}),
                   ...(data.skill_id || message.activeSkill?.id ? { 技能ID: data.skill_id || message.activeSkill.id } : {}),
                   ...(data.skill_version || message.activeSkill?.version ? { 版本: data.skill_version || message.activeSkill.version } : {}),
@@ -395,7 +439,7 @@ function AgentPage() {
               } : step)
               return {
                 ...message,
-                activeSkill: !isScript && selectedSkill ? {
+                activeSkill: !isTool && selectedSkill ? {
                   id: selectedSkill.id,
                   name: selectedSkill.name,
                   version: selectedSkill.version,
@@ -404,7 +448,7 @@ function AgentPage() {
                   ...completedSteps,
                   thinkingStep(
                     `thinking:${data.step}:${data.tool_call_id || completedAt}`,
-                    isScript ? '正在整理工具结果' : '正在规划执行方式',
+                    isTool ? '正在整理工具结果' : '正在规划执行方式',
                     completedAt,
                   ),
                 ],
@@ -428,6 +472,11 @@ function AgentPage() {
               content: data.content ?? message.content,
               steps: completeRunningSteps(message.steps, completedAt),
               completedAt,
+              runtimeId: data.runtime_id || message.runtimeId,
+              runtimeName: data.runtime_name || message.runtimeName,
+              usage: data.usage || null,
+              toolCallCount: data.tool_call_count || 0,
+              maxSteps: data.max_steps || null,
               pending: false,
               status: 'completed',
             })))
@@ -539,7 +588,7 @@ function AgentPage() {
         <header className="chat-topbar">
           <div>
             <h1>{activeSession?.title || '新对话'}</h1>
-            <span className={`connection-label is-${connection.status}`}><i />{statusText}</span>
+            <span className={`connection-label is-${connection.status}`}><i />{statusText}<em className={`runtime-badge is-${selectedRuntimeId}`}>{selectedRuntime?.name || selectedRuntimeId}</em></span>
           </div>
           <div className="chat-topbar-actions">
             <button className="chat-icon-button" type="button" aria-label="重新连接后端" disabled={busy} onClick={() => setReloadToken((value) => value + 1)}><Icon name="settings" size={18} /></button>
@@ -556,6 +605,7 @@ function AgentPage() {
         >
           <div className="conversation-inner">
             {error && <div className="agent-error" role="alert"><span>{error}</span><button type="button" onClick={() => setReloadToken((value) => value + 1)}>重试连接</button></div>}
+            {runtimeNotice && <div className="agent-notice" role="status"><Icon name="agent" size={15} /><span>{runtimeNotice}</span></div>}
             <MessageTimeline messages={messages} busy={busy || loadingSession} />
             {messages.length === 1 && messages[0].id === 'welcome' && (
               <div className="starter-prompts">
@@ -570,14 +620,17 @@ function AgentPage() {
             busy={busy}
             models={models}
             skills={compatibleSkills}
+            runtimes={runtimes}
             selectedModelId={selectedModelId}
             selectedSkillId={selectedSkillId}
+            selectedRuntimeId={selectedRuntimeId}
             contextStats={contextStats}
             knowledgeEnabled={knowledgeEnabled}
             canSend={connection.status === 'connected' && Boolean(selectedModel)}
             onChange={setInput}
             onModelChange={changeModel}
             onSkillChange={setSelectedSkillId}
+            onRuntimeChange={changeRuntime}
             onKnowledgeChange={changeKnowledge}
             onSend={sendMessage}
             onStop={stopGeneration}

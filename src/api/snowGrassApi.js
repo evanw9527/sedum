@@ -122,17 +122,21 @@ export const snowGrassApi = {
   rollbackWorkflow: (workflowId, targetVersionId, expectedCurrentVersionId, reason = '') => request(`/workflows/${workflowId}/rollback`, {
     method: 'POST', body: JSON.stringify({ target_version_id: targetVersionId, expected_current_version_id: expectedCurrentVersionId, reason: reason || null }),
   }),
-  listWorkflowRuns: ({ workflowId = '', status = '', versionId = '', preview = '' } = {}) => {
+  listWorkflowRuns: ({ workflowId = '', status = '', versionId = '', preview = '', startedAfter = '', limit = 20, offset = 0 } = {}) => {
     const params = new URLSearchParams()
     if (workflowId) params.set('workflow_id', workflowId)
     if (status) params.set('status', status)
     if (versionId) params.set('version_id', versionId)
     if (preview !== '') params.set('preview', String(preview))
+    if (startedAfter) params.set('started_after', startedAfter)
+    params.set('limit', String(limit))
+    params.set('offset', String(offset))
     return request(`/workflow-runs${params.size ? `?${params}` : ''}`)
   },
   getWorkflowRun: (runId) => request(`/workflow-runs/${runId}`),
   listModels: () => request('/models'),
   listSkills: () => request('/skills'),
+  listAgentRuntimes: () => request('/agent-runtimes'),
   listAdminSkills: ({ query = '', source = '', status = '' } = {}) => {
     const params = new URLSearchParams()
     if (query) params.set('query', query)
@@ -216,9 +220,15 @@ export const snowGrassApi = {
   },
   listMessages: (sessionId) => request(`/sessions/${sessionId}/messages`),
   getSessionMemory: (sessionId) => request(`/sessions/${sessionId}/memory`),
-  createSession: ({ title, modelId, skillId, knowledgeEnabled = false }) => request('/sessions', {
+  createSession: ({ title, modelId, skillId, knowledgeEnabled = false, runtimeId = 'native' }) => request('/sessions', {
     method: 'POST',
-    body: JSON.stringify({ title, model_id: modelId, skill_id: skillId || null, knowledge_enabled: knowledgeEnabled }),
+    body: JSON.stringify({
+      title,
+      model_id: modelId,
+      skill_id: skillId || null,
+      knowledge_enabled: knowledgeEnabled,
+      runtime_id: runtimeId,
+    }),
   }),
   updateSessionKnowledge: (sessionId, enabled) => request(`/sessions/${sessionId}/knowledge`, {
     method: 'PATCH',

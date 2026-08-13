@@ -223,7 +223,7 @@
 :root[data-theme="dark"] .run-filters,
 :root[data-theme="dark"] .run-table,
 :root[data-theme="dark"] .run-table-head,
-:root[data-theme="dark"] .run-table > a,
+:root[data-theme="dark"] .run-record-row,
 :root[data-theme="dark"] .run-summary > div,
 :root[data-theme="dark"] .trace-rail li > div { color: var(--ui-text); border-color: var(--ui-border); background: var(--ui-panel); }
 :root[data-theme="dark"] .run-table-head,

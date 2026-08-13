@@ -38,10 +38,13 @@ function nearestEnd(event, source, target) {
   return distanceTo(source) <= distanceTo(target) ? 'source' : 'target'
 }
 
-function EdgeLayer({ nodes, edges, selectedEdgeId, pendingPort, reconnecting, onSelect, onDelete, onReconnectStart }) {
+function EdgeLayer({ nodes, edges, selectedEdgeId, pendingPort, reconnecting, onSelect, onReconnectStart }) {
   return (
     <svg className="v2-edges">
-      <defs><marker id="v2-arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto"><path d="M 1 1 L 11 6 L 1 11 Z" /></marker></defs>
+      <defs>
+        <marker id="v2-arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9" orient="auto"><path d="M 1 1 L 11 6 L 1 11 Z" /></marker>
+        <marker id="v2-arrow-selected" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto"><path d="M 1 1 L 11 6 L 1 11 Z" /></marker>
+      </defs>
       {edges.map((edge) => {
         const sourceNode = nodes.find((node) => node.id === edge.source_node_id)
         const targetNode = nodes.find((node) => node.id === edge.target_node_id)
@@ -61,7 +64,7 @@ function EdgeLayer({ nodes, edges, selectedEdgeId, pendingPort, reconnecting, on
           onReconnectStart(event, edge, end)
         }
         return <g className={`v2-edge ${selected ? 'is-selected' : ''} ${edge.condition ? 'has-condition' : ''}`} key={edge.id}>
-          <path className="edge-line" markerEnd="url(#v2-arrow)" d={path} />
+          <path className="edge-line" markerEnd={selected ? 'url(#v2-arrow-selected)' : 'url(#v2-arrow)'} d={path} />
           <path className="edge-hit" d={path}
             onClick={(event) => { event.stopPropagation(); onSelect(edge.id) }}
             onPointerDown={(event) => startReconnect(event, nearestEnd(event, source, target))}>
@@ -69,11 +72,10 @@ function EdgeLayer({ nodes, edges, selectedEdgeId, pendingPort, reconnecting, on
           </path>
           {label && <foreignObject className="edge-condition-label" x={center.x - 70} y={center.y - 28} width="140" height="24"><button type="button" title={label} onClick={(event) => { event.stopPropagation(); onSelect(edge.id) }}><Icon name="condition" size={12} weight="fill" /><span>{label}</span></button></foreignObject>}
           {selected && <>
-            <circle className="edge-endpoint-hit source" cx={source.x + 10} cy={source.y} r="16" onPointerDown={(event) => startReconnect(event, 'source')}><title>拖动改接来源</title></circle>
-            <circle className="edge-endpoint source" cx={source.x + 10} cy={source.y} r="7" />
-            <circle className="edge-endpoint-hit target" cx={target.x - 10} cy={target.y} r="16" onPointerDown={(event) => startReconnect(event, 'target')}><title>拖动改接目标</title></circle>
-            <circle className="edge-endpoint target" cx={target.x - 10} cy={target.y} r="7" />
-            <foreignObject className="edge-inline-actions" x={center.x - 44} y={center.y + 7} width="88" height="32"><div><button type="button" aria-label="编辑连线条件" title="编辑条件" onClick={(event) => { event.stopPropagation(); onSelect(edge.id) }}><Icon name="condition" size={14} /></button><button className="danger" type="button" aria-label="删除连线" title="删除连线" onClick={(event) => { event.stopPropagation(); onDelete(edge.id) }}><Icon name="trash" size={14} /></button></div></foreignObject>
+            <circle className="edge-endpoint-hit source" cx={source.x} cy={source.y} r="16" onPointerDown={(event) => startReconnect(event, 'source')}><title>拖动改接来源</title></circle>
+            <circle className="edge-endpoint source" cx={source.x} cy={source.y} r="6" />
+            <circle className="edge-endpoint-hit target" cx={target.x} cy={target.y} r="16" onPointerDown={(event) => startReconnect(event, 'target')}><title>拖动改接目标</title></circle>
+            <circle className="edge-endpoint target" cx={target.x} cy={target.y} r="6" />
           </>}
         </g>
       })}

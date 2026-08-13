@@ -91,6 +91,9 @@
 .conversation-inner { width: min(760px, calc(100% - 48px)); min-height: 100%; margin: 0 auto; padding: 42px 0 34px; }
 .agent-error { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; padding: 11px 13px; color: #963943; border: 1px solid #f1d5d8; border-radius: 11px; background: #fff5f6; font-size: 10px; line-height: 1.5; }
 .agent-error button { flex: 0 0 auto; padding: 5px 8px; color: #963943; border: 0; border-radius: 7px; background: #f8dfe2; font-size: 9px; cursor: pointer; }
+.agent-notice { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; padding: 10px 12px; color: #31527d; border: 1px solid #d9e2f3; border-radius: 10px; background: #f4f7fc; font-size: 10px; line-height: 1.5; }
+.runtime-badge { display: inline-flex; align-items: center; margin-left: 7px; padding: 2px 6px; color: #536073; border: 1px solid #dfe3e9; border-radius: 5px; background: #f7f8fa; font-size: 8px; font-style: normal; font-weight: 700; }
+.runtime-badge.is-openai-agents, .runtime-trace-badge.is-openai-agents { color: #375d49; border-color: #cfe3d7; background: #f0f8f3; }
 .message-timeline { display: flex; flex-direction: column; gap: 30px; }
 .message-row { display: flex; align-items: flex-start; gap: 12px; }
 .message-row.is-user { justify-content: flex-end; }
@@ -146,6 +149,7 @@
 .process-trace-summary { width: 100%; min-height: 44px; display: grid; grid-template-columns: 24px auto 1fr 18px; align-items: center; gap: 8px; padding: 0; text-align: left; color: var(--agent-muted); border: 0; background: #fff; cursor: pointer; }
 .process-trace-summary:hover { color: var(--agent-blue); }
 .process-trace-summary strong { color: var(--agent-ink); font-size: 12px; font-weight: 720; }
+.runtime-trace-badge { display: inline-flex; margin-left: 7px; padding: 2px 5px; color: #536073; border: 1px solid #dfe3e9; border-radius: 4px; background: #f7f8fa; font-size: 8px; font-style: normal; vertical-align: 1px; }
 .process-trace-summary > span:nth-of-type(2) { font-size: 10px; font-variant-numeric: tabular-nums; }
 .process-trace-summary > .icon:last-child { transition: transform .18s ease; }
 .process-trace-summary[aria-expanded="true"] > .icon:last-child { transform: rotate(90deg); }
@@ -197,6 +201,11 @@
 .composer-actions { min-height: 42px; display: flex; align-items: center; justify-content: space-between; padding: 5px 7px 7px 9px; }
 .composer-actions > div { display: flex; align-items: center; gap: 5px; }
 .composer-capabilities { min-width: 0; }
+.runtime-switch { height: 29px; display: inline-flex; align-items: stretch; padding: 2px; border-radius: 9px; background: #eef0f3; }
+.runtime-switch button { min-width: 54px; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 7px; color: #747a85; border: 0; border-radius: 7px; background: transparent; font-size: 10px; cursor: pointer; }
+.runtime-switch button small { font-size: 8px; opacity: .65; }
+.runtime-switch button.is-active { color: var(--agent-blue); background: #fff; box-shadow: 0 1px 4px rgba(22,28,49,.12); }
+.runtime-switch button:disabled { opacity: .4; cursor: not-allowed; }
 .composer-select-label { height: 29px; min-width: 0; display: inline-flex; align-items: center; gap: 3px; padding: 0 5px 0 7px; color: var(--agent-muted); border-radius: 8px; background: #f6f7f9; }
 .composer-select-label:focus-within { color: var(--agent-blue); background: var(--agent-blue-soft); }
 .composer-select-label select { min-width: 0; max-width: 180px; height: 27px; color: inherit; border: 0; outline: 0; background: transparent; font-size: 10px; cursor: pointer; }
@@ -236,6 +245,9 @@
   .conversation-inner { width: calc(100% - 28px); padding-top: 28px; }
   .starter-prompts { grid-template-columns: 1fr; margin-left: 44px; }
   .composer-area { padding-inline: 12px; }
+  .composer-actions { align-items: flex-end; }
+  .composer-capabilities { flex-wrap: wrap; }
+  .runtime-switch { flex-basis: 100%; width: max-content; }
   .chat-topbar { padding-inline: 14px; }
 }
 
@@ -248,7 +260,8 @@
   .starter-prompts { margin-left: 0; }
   .chat-icon-button { display: none; }
   .composer-select-label select { max-width: 112px; }
-  .composer-select-label:nth-child(2) select { max-width: 126px; }
+  .composer-select-label select { max-width: 96px; }
+  .runtime-switch button small { display: none; }
   .context-usage-meter { width: 29px; justify-content: center; padding-inline: 0; }
   .context-usage-value { display: none; }
 }

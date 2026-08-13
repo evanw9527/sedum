@@ -58,7 +58,7 @@ function ProcessStep({ step, now, isLast }) {
   )
 }
 
-function ProcessTrace({ steps, pending, status, startedAt, completedAt }) {
+function ProcessTrace({ steps, pending, status, startedAt, completedAt, runtimeName, runtimeId, toolCallCount, usage }) {
   const [expanded, setExpanded] = useState(true)
   const [now, setNow] = useState(Date.now())
   const running = pending || steps.some((step) => step.status === 'running')
@@ -82,8 +82,8 @@ function ProcessTrace({ steps, pending, status, startedAt, completedAt }) {
         onClick={() => setExpanded((current) => !current)}
       >
         <span className="process-trace-mark"><Icon name="llm" size={18} /></span>
-        <strong>{title}</strong>
-        <span>耗时 {formatDuration(end - start)}</span>
+        <strong>{title}<em className={`runtime-trace-badge is-${runtimeId || 'native'}`}>{runtimeName || '自研 Agent'}</em></strong>
+        <span>耗时 {formatDuration(end - start)}{toolCallCount ? ` · ${toolCallCount} 次 Tool` : ''}{usage?.total_tokens ? ` · ${usage.total_tokens} tokens` : ''}</span>
         <Icon name="chevron" size={16} />
       </button>
       {expanded && (
@@ -111,7 +111,7 @@ function MessageTimeline({ messages, busy }) {
         <article className={`message-row is-${message.role} is-${message.status || 'completed'}`} key={message.id}>
           {message.role === 'assistant' && <span className="agent-avatar"><Icon name="agent" size={18} weight="bold" /></span>}
           <div className="message-stack">
-            <div className="message-label">{message.role === 'assistant' ? 'Sedum Agent' : '你'}</div>
+            <div className="message-label">{message.role === 'assistant' ? `Sedum Agent · ${message.runtimeName || '自研 Agent'}` : '你'}</div>
             {message.steps?.length > 0 && (
               <ProcessTrace
                 steps={message.steps}
@@ -119,6 +119,10 @@ function MessageTimeline({ messages, busy }) {
                 status={message.status}
                 startedAt={message.startedAt}
                 completedAt={message.completedAt}
+                runtimeName={message.runtimeName}
+                runtimeId={message.runtimeId}
+                toolCallCount={message.toolCallCount}
+                usage={message.usage}
               />
             )}
             {message.content && <MessageContent content={message.content} role={message.role} />}

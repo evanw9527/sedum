@@ -38,14 +38,17 @@ function ChatComposer({
   busy,
   models,
   skills,
+  runtimes,
   selectedModelId,
   selectedSkillId,
+  selectedRuntimeId,
   contextStats,
   knowledgeEnabled,
   canSend,
   onChange,
   onModelChange,
   onSkillChange,
+  onRuntimeChange,
   onKnowledgeChange,
   onSend,
   onStop,
@@ -72,6 +75,21 @@ function ChatComposer({
       />
       <div className="composer-actions">
         <div className="composer-capabilities">
+          <div className="runtime-switch" role="group" aria-label="选择 Agent 运行方式">
+            {runtimes.map((runtime) => (
+              <button
+                className={selectedRuntimeId === runtime.id ? 'is-active' : ''}
+                type="button"
+                key={runtime.id}
+                disabled={busy || !runtime.available}
+                title={runtime.available ? runtime.description : runtime.unavailable_reason || '当前不可用'}
+                onClick={() => onRuntimeChange(runtime.id)}
+              >
+                {runtime.id === 'native' ? '自研' : '框架'}
+                <small>{runtime.id === 'native' ? 'Native' : 'OpenAI Agents'}</small>
+              </button>
+            ))}
+          </div>
           <label className="composer-select-label">
             <Icon name="agent" size={15} />
             <span className="sr-only">选择模型</span>
